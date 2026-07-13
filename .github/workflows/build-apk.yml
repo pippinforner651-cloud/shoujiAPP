@@ -64,15 +64,25 @@ jobs:
       - name: Verify Debug APK Signature
         run: |
           DEBUG_APK="frontend/android/app/build/outputs/apk/debug/app-debug.apk"
+
           if [ ! -f "$DEBUG_APK" ]; then
-            echo "❌ Debug APK not found!"
+            echo "Debug APK not found"
             exit 1
           fi
-          echo "✅ Debug APK exists"
+
+          echo "Debug APK exists"
           ls -lh "$DEBUG_APK"
           sha256sum "$DEBUG_APK"
-          echo "--- apksigner verify ---"
-          $ANDROID_SDK_ROOT/build-tools/*/apksigner verify --verbose --print-certs "$DEBUG_APK" 2>&1
+
+          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner not found"
+            exit 1
+          fi
+
+          echo "Using apksigner: $APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$DEBUG_APK"
 
       - name: Rename Debug APK for Delivery
         run: |
