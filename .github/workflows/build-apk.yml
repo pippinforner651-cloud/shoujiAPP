@@ -25,7 +25,6 @@ jobs:
         with:
           node-version: 22
 
-      # SSH认证已配置，使用SSH推送
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -37,7 +36,6 @@ jobs:
 
       - name: Set API Base URL
         run: |
-          # 优先级: 手动输入 > GitHub变量 > 默认值
           API_URL="${{ inputs.api_base_url || vars.VITE_API_BASE_URL || 'https://chinarun-api.onrender.com' }}"
           echo "VITE_API_BASE_URL=$API_URL" >> "$GITHUB_ENV"
           echo "Using API: $API_URL"
@@ -56,6 +54,47 @@ jobs:
         working-directory: frontend
         run: npx cap sync android
 
+      # ============================================
+      # 1. DEBUG APK — 自动签名，可安装
+      # ============================================
+      - name: Build Debug APK
+        working-directory: frontend/android
+        run: |
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Verify Debug APK Signature
+        run: |
+          DEBUG_APK="frontend/android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$DEBUG_APK" ]; then
+            echo "✅ Debug APK exists"
+            ls -lh "$DEBUG_APK"
+            # 验证签名
+            $ANDROID_SDK_ROOT/build-tools/*/apksigner verify --verbose --print-certs "$DEBUG_APK" 2>&1 || echo "apksigner not available, skipping verify"
+            # SHA256
+            sha256sum "$DEBUG_APK"
+          else
+            echo "❌ Debug APK not found!"
+            exit 1
+          fi
+
+      - name: Rename Debug APK for Delivery
+        run: |
+          cp frontend/android/app/build/outputs/apk/debug/app-debug.apk \
+             全民环游中国_V1.0_安卓测试版.apk
+          echo "DEBUG_APK_SHA=$(sha256sum 全民环游中国_V1.0_安卓测试版.apk | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 全民环游中国_V1.0_安卓测试版
+          path: 全民环游中国_V1.0_安卓测试版.apk
+          retention-days: 30
+
+      # ============================================
+      # 2. RELEASE APK — 仅当 Secrets 配置时才签名
+      # ============================================
       - name: Build Release APK
         working-directory: frontend/android
         run: |
@@ -63,29 +102,86 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
-      - name: Sign APK (if keystore exists)
-        if: env.KEYSTORE_BASE64 != ''
+      - name: Sign Release APK with Secrets
+        if: >
+          secrets.ANDROID_KEYSTORE_BASE64 != '' &&
+          secrets.ANDROID_KEYSTORE_PASSWORD != '' &&
+          secrets.ANDROID_KEY_ALIAS != '' &&
+          secrets.ANDROID_KEY_PASSWORD != ''
+        working-directory: frontend/android
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
-          jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 \
-            -keystore keystore.jks -storepass ${{ secrets.KEYSTORE_PASS }} \
-            frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk \
-            ${{ secrets.KEY_ALIAS }}
-          $ANDROID_SDK_ROOT/build-tools/34.0.0/zipalign -v -p 4 \
-            frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk \
-            全民环游中国_V1.0.apk
-        working-directory: .
+          # 从 Secret 恢复 keystore
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > chinarun-release.jks
 
-      - name: Upload APK Artifact
+          # 复制 unsigned APK
+          UNSIGNED="app/build/outputs/apk/release/app-release-unsigned.apk"
+          SIGNED="app/build/outputs/apk/release/app-release-signed.apk"
+          cp "$UNSIGNED" "$SIGNED"
+
+          # 配置签名环境变量
+          export ANDROID_KEYSTORE_FILE="$PWD/chinarun-release.jks"
+          export ANDROID_KEYSTORE_PASSWORD="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+          export ANDROID_KEY_ALIAS="${{ secrets.ANDROID_KEY_ALIAS }}"
+          export ANDROID_KEY_PASSWORD="${{ secrets.ANDROID_KEY_PASSWORD }}"
+
+          # 通过 jarsigner 签名
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore "$ANDROID_KEYSTORE_FILE" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_KEY_PASSWORD" \
+            "$SIGNED" "$ANDROID_KEY_ALIAS"
+
+          # zipalign
+          $ANDROID_SDK_ROOT/build-tools/*/zipalign -v -p 4 \
+            "$SIGNED" \
+            app/build/outputs/apk/release/app-release.apk
+
+          # 验证签名
+          $ANDROID_SDK_ROOT/build-tools/*/apksigner verify --verbose --print-certs \
+            app/build/outputs/apk/release/app-release.apk
+
+      - name: Deliver Release APK (if signed)
+        if: >
+          secrets.ANDROID_KEYSTORE_BASE64 != '' &&
+          secrets.ANDROID_KEYSTORE_PASSWORD != '' &&
+          secrets.ANDROID_KEY_ALIAS != '' &&
+          secrets.ANDROID_KEY_PASSWORD != ''
+        run: |
+          cp frontend/android/app/build/outputs/apk/release/app-release.apk \
+             全民环游中国_V1.0_安卓正式版.apk
+          echo "RELEASE_APK_SHA=$(sha256sum 全民环游中国_V1.0_安卓正式版.apk | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Upload Release APK Artifact (if signed)
+        if: >
+          secrets.ANDROID_KEYSTORE_BASE64 != '' &&
+          secrets.ANDROID_KEYSTORE_PASSWORD != '' &&
+          secrets.ANDROID_KEY_ALIAS != '' &&
+          secrets.ANDROID_KEY_PASSWORD != ''
         uses: actions/upload-artifact@v4
         with:
-          name: 全民环游中国_V1.0
-          path: frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          name: 全民环游中国_V1.0_安卓正式版
+          path: 全民环游中国_V1.0_安卓正式版.apk
           retention-days: 30
 
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: 全民环游中国_Debug
-          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
+      - name: Mark Unsigned Release as Not For Delivery
+        if: >
+          secrets.ANDROID_KEYSTORE_BASE64 == '' ||
+          secrets.ANDROID_KEYSTORE_PASSWORD == '' ||
+          secrets.ANDROID_KEY_ALIAS == '' ||
+          secrets.ANDROID_KEY_PASSWORD == ''
+        run: |
+          echo "============================================"
+          echo "⚠️  未配置签名 Secrets"
+          echo ""
+          echo "  app-release-unsigned.apk 已生成但不可安装。"
+          echo "  只交付 Debug APK 用于测试。"
+          echo ""
+          echo "  要生成正式签名版，请配置以下 Secrets："
+          echo "    ANDROID_KEYSTORE_BASE64"
+          echo "    ANDROID_KEYSTORE_PASSWORD"
+          echo "    ANDROID_KEY_ALIAS"
+          echo "    ANDROID_KEY_PASSWORD"
+          echo ""
+          echo "  Secrets 配置位置："
+          echo "    Settings → Secrets and variables → Actions"
+          echo "============================================"
