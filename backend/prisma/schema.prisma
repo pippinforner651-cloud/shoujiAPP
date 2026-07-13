@@ -1,0 +1,246 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id
+  nickname        String   @default("跑者")
+  avatar          String   @default("default")
+  avatarUrl       String?  @map("avatar_url")
+  level           Int      @default(1)
+  experience      Int      @default(0)
+  isGuest         Boolean  @default(true) @map("is_guest")
+
+  // APP 注册字段
+  realName        String?  @map("real_name")
+  phoneVerified   Boolean  @default(false) @map("phone_verified")
+  registerSource  String?  @map("register_source")  // 'wechat' | 'phone' | 'invite'
+  status          String   @default("active")        // 'active' | 'disabled' | 'deleted'
+
+  // 微信认证字段
+  wechatOpenid    String?  @unique @map("wechat_openid")
+  wechatUnionid   String?  @map("wechat_unionid")
+  wechatAvatar    String?  @map("wechat_avatar")
+  wechatNickname  String?  @map("wechat_nickname")
+
+  // 其他登录方式
+  phone           String?  @unique
+  loginType       String?  @map("login_type")    // 'wechat' | 'phone' | 'apple' | 'guest'
+
+  // 邀请
+  inviteCode      String?  @unique @map("invite_code")
+  invitedBy       String?  @map("invited_by")
+
+  cloudUserId     String?  @map("cloud_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  lastLoginAt     DateTime? @map("last_login_at")
+  lastSyncAt      DateTime? @map("last_sync_at")
+
+  // 关联
+  profile         UserProfile?
+  activities      Activity[]
+  userAchievements UserAchievement[]
+  cityUnlocks     CityUnlock[]
+  syncLogs        SyncLog[]
+  sentInvites     InviteCode[] @relation("InviteSender")
+
+  // 好友关系
+  friendships     Friend[]     @relation("UserFriends")
+  friendOf        Friend[]     @relation("FriendOf")
+  sentFeed        ActivityFeed[]
+
+  // 邀请关系
+  invitedUsers    UserInvite[] @relation("Inviter")
+  invitedByRel    UserInvite[] @relation("Invitee")
+
+  // 跑团成员
+  groupMemberships GroupMember[]
+  userEvents       UserEvent[]
+
+  @@index([wechatOpenid])
+  @@index([inviteCode])
+  @@map("users")
+}
+
+model UserProfile {
+  userId          String   @id @map("user_id")
+  appNickname     String   @default("") @map("app_nickname")
+  appAvatar       String   @default("") @map("app_avatar")
+  signature       String   @default("")
+  rankVisibility  Boolean  @default(true) @map("rank_visibility")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+  @@map("user_profiles")
+}
+
+model Friend {
+  id          Int      @id @default(autoincrement())
+  userId      String   @map("user_id")
+  friendId    String   @map("friend_id")
+  status      String   @default("pending")  // 'pending' | 'accepted' | 'rejected'
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user   User @relation("UserFriends", fields: [userId], references: [id])
+  friend User @relation("FriendOf", fields: [friendId], references: [id])
+
+  @@unique([userId, friendId])
+  @@index([userId, status])
+  @@index([friendId, status])
+  @@map("friends")
+}
+
+model UserInvite {
+  id          Int      @id @default(autoincrement())
+  inviterId   String   @map("inviter_id")
+  inviteeId   String   @map("invitee_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  inviter User @relation("Inviter", fields: [inviterId], references: [id])
+  invitee User @relation("Invitee", fields: [inviteeId], references: [id])
+
+  @@unique([inviterId, inviteeId])
+  @@map("user_invites")
+}
+
+model ActivityFeed {
+  id          Int      @id @default(autoincrement())
+  userId      String   @map("user_id")
+  activityId  String?  @map("activity_id")
+  feedType    String   @map("feed_type")    // 'run' | 'city' | 'achievement'
+  content     String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("activity_feeds")
+}
+
+model Group {
+  id          String   @id
+  name        String
+  description String   @default("")
+  type        String   @default("city")   // 'family' | 'company' | 'school' | 'city' | 'custom'
+  avatar      String   @default("👥")
+  ownerId     String   @map("owner_id")
+  inviteCode  String?  @unique @map("invite_code")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  members GroupMember[]
+  @@map("groups")
+}
+
+model GroupMember {
+  id        Int      @id @default(autoincrement())
+  groupId   String   @map("group_id")
+  userId    String   @map("user_id")
+  role      String   @default("member")  // 'owner' | 'admin' | 'member'
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  group Group @relation(fields: [groupId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+model UserEvent {
+  id        Int      @id @default(autoincrement())
+  userId    String   @map("user_id")
+  eventType String   @map("event_type")   // 'login' | 'open_map' | 'run' | 'share' | 'invite' | 'unlock_city'
+  metadata  Json?                         // 附加数据（如 distance_km, city_id 等）
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([eventType, createdAt])
+  @@map("user_events")
+}
+
+model InviteCode {
+  code        String   @id
+  senderId    String   @map("sender_id")
+  sender      User     @relation("InviteSender", fields: [senderId], references: [id])
+  usedBy      String?  @map("used_by")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([code])
+  @@map("invite_codes")
+}
+
+model Activity {
+  id            String   @id
+  userId        String   @map("user_id")
+  source        String   @default("manual")
+  activityType  String   @default("running") @map("activity_type")
+  distanceKm    Float    @map("distance_km")
+  durationSec   Int      @map("duration_sec")
+  paceSec       Float    @map("pace_sec")
+  calories      Int?
+  startTime     DateTime @map("start_time")
+  gpsTrack      Json?    @map("gps_track")
+  note          String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+  @@index([userId, startTime(sort: Desc)])
+  @@map("activities")
+}
+
+model Achievement {
+  id            String  @id
+  name          String
+  description   String?
+  icon          String
+  category      String
+  conditionType String  @map("condition_type")
+  threshold     Float
+  xpReward      Int     @default(0) @map("xp_reward")
+  userAchievements UserAchievement[]
+  @@map("achievements")
+}
+
+model UserAchievement {
+  userId        String    @map("user_id")
+  achievementId String    @map("achievement_id")
+  progress      Float     @default(0)
+  unlocked      Boolean   @default(false)
+  unlockedAt    DateTime? @map("unlocked_at")
+  user        User        @relation(fields: [userId], references: [id])
+  achievement Achievement @relation(fields: [achievementId], references: [id])
+  @@id([userId, achievementId])
+  @@map("user_achievements")
+}
+
+model CityUnlock {
+  id        Int      @id @default(autoincrement())
+  userId    String   @map("user_id")
+  cityId    String   @map("city_id")
+  cityOrder Int      @map("city_order")
+  cityName  String   @map("city_name")
+  reachedAt DateTime @default(now()) @map("reached_at")
+  user User @relation(fields: [userId], references: [id])
+  @@unique([userId, cityId])
+  @@map("city_unlocks")
+}
+
+model SyncLog {
+  id                Int      @id @default(autoincrement())
+  userId            String   @map("user_id")
+  syncType          String   @map("sync_type")
+  status            String
+  recordsUploaded   Int      @default(0) @map("records_uploaded")
+  recordsDownloaded Int      @default(0) @map("records_downloaded")
+  errorMessage      String?  @map("error_message")
+  createdAt         DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("sync_logs")
+}

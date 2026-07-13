@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f2027"/>
+      <stop offset="50%" style="stop-color:#203a43"/>
+      <stop offset="100%" style="stop-color:#2c5364"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)" rx="224"/>
+  <!-- 地球 -->
+  <circle cx="512" cy="440" r="220" fill="none" stroke="#4fc3f7" stroke-width="6"/>
+  <circle cx="512" cy="440" r="160" fill="none" stroke="#29b6f6" stroke-width="4" opacity="0.5"/>
+  <!-- 大陆轮廓抽象 -->
+  <path d="M380 380 Q420 340 480 360 Q520 370 540 340 Q580 300 620 340 Q660 380 640 440 Q620 500 580 520 Q520 540 480 500 Q440 460 420 480 Q380 500 380 440Z" fill="#66bb6a" opacity="0.8"/>
+  <path d="M500 300 Q520 280 540 290 Q550 300 530 310Z" fill="#66bb6a" opacity="0.6"/>
+  <!-- 跑步者 -->
+  <circle cx="510" cy="410" r="20" fill="#fff"/>
+  <ellipse cx="510" cy="450" rx="25" ry="35" fill="#fff" opacity="0.9"/>
+  <line x1="510" y1="460" x2="480" y2="520" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+  <line x1="510" y1="460" x2="555" y2="490" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+  <line x1="510" y1="460" x2="540" y2="520" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity="0.6"/>
+  <!-- 底部文字 -->
+  <rect x="312" y="760" width="400" height="60" rx="30" fill="none" stroke="#4fc3f7" stroke-width="4"/>
+  <text x="512" y="800" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#fff" text-anchor="middle">全民环游中国</text>
+</svg>

@@ -1,0 +1,77 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:  # 手动触发
+  push:
+    branches: [main, master, release]
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'microsoft'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Dependencies
+        working-directory: frontend
+        run: |
+          npm install
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Sync Capacitor
+        working-directory: frontend
+        run: npx cap sync android
+
+      - name: Build Release APK
+        working-directory: frontend/android
+        run: |
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Sign APK (if keystore exists)
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+          jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 \
+            -keystore keystore.jks -storepass ${{ secrets.KEYSTORE_PASS }} \
+            frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk \
+            ${{ secrets.KEY_ALIAS }}
+          $ANDROID_SDK_ROOT/build-tools/34.0.0/zipalign -v -p 4 \
+            frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk \
+            全民环游中国_V1.0.apk
+        working-directory: .
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 全民环游中国_V1.0
+          path: frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 30
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: 全民环游中国_Debug
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

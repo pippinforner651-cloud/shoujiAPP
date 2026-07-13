@@ -1,0 +1,21 @@
+{
+  "name": "全民环游中国虚拟跑步地图",
+  "short_name": "环游中国",
+  "description": "跑遍中国 · 足不出户 — 将现实跑步映射到虚拟中国地图的 Web 应用",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f2027",
+  "theme_color": "#0f2027",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
