@@ -21,13 +21,6 @@ export default function RunSession() {
   const addRecord = useRunStore((s) => s.addRecord);
   const getUnsyncedRecords = useRunStore((s) => s.getUnsyncedRecords);
 
-export default function RunSession() {
-  const [gpsGranted, setGpsGranted] = useState<boolean | null>(null);
-  const [session, setSession] = useState<RunSessionData>(createEmptySession());
-  const watchIdRef = useRef<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef<number>(0);
-
   // GPS 权限
   useEffect(() => {
     checkGpsPermission().then((state) => {
