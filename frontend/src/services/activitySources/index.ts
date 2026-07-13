@@ -148,11 +148,15 @@ export { AppGpsAdapter, HealthConnectAdapter, HealthKitAdapter, CorosAdapter, Jo
  * ========================================= */
 
 import { SOURCE_LABELS, SOURCE_EMOJIS } from '../activityAdapter/types';
+import type { ActivitySource } from '../../types/activity';
+import { normalizeActivitySource } from '../../types/activity';
 
 export function getSourceLabel(source: string): string {
-  return (SOURCE_LABELS as Record<string, string>)[source] || source;
+  const normalized = normalizeActivitySource(source);
+  return SOURCE_LABELS[normalized] || source;
 }
 
 export function getSourceEmoji(source: string): string {
-  return (SOURCE_EMOJIS as Record<string, string>)[source] || '📡';
+  const normalized = normalizeActivitySource(source);
+  return SOURCE_EMOJIS[normalized] || '📡';
 }

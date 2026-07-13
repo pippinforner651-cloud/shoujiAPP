@@ -21,7 +21,7 @@ export function generateMockAppleWatchData(): SimpleActivityInput[] {
   // 3 条记录：模拟一周内的 3 次跑步
   return [
     {
-      source: 'apple_health',
+      source: 'healthkit',
       date: todayStr,
       distanceKm: 21.1,        // 半马
       durationMin: 105,
@@ -30,7 +30,7 @@ export function generateMockAppleWatchData(): SimpleActivityInput[] {
       note: '晨跑·半马训练',
     },
     {
-      source: 'apple_health',
+      source: 'healthkit',
       date: todayStr,
       distanceKm: 15.0,
       durationMin: 75,
@@ -39,7 +39,7 @@ export function generateMockAppleWatchData(): SimpleActivityInput[] {
       note: '恢复跑',
     },
     {
-      source: 'apple_health',
+      source: 'healthkit',
       date: todayStr,
       distanceKm: 20.9,        // 凑满 57km
       durationMin: 110,

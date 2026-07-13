@@ -1,9 +1,11 @@
 /**
  * 运动数据适配器（V1.1 兼容层）
  *
- * Phase 6.3 — 兼容层使用 string 类型，支持新旧 ActivitySource 值。
+ * Phase 6.3 — 外部旧值通过 normalizeActivitySource 转换后再入库。
  */
 import { useRunStore } from '../../store/runStore';
+import type { ActivitySource } from '../../types/activity';
+import { normalizeActivitySource } from '../../types/activity';
 import { SCALE_RATIO } from '../../types/progress';
 
 /* ===== 来源名称映射 ===== */
@@ -48,14 +50,16 @@ export interface SimpleActivityInput {
   note?: string;
 }
 
-/** 将简易输入适配到 runStore */
+/** 将简易输入适配到 runStore（source 自动经 normalizeActivitySource 转换） */
 export function adaptActivity(input: SimpleActivityInput): AdapterResult {
   if (!input.distanceKm || input.distanceKm <= 0) {
     return { success: false, error: '距离必须大于 0' };
   }
 
-  const sourceEmoji = SOURCE_EMOJIS[input.source] || '📡';
-  const sourceLabel = SOURCE_LABELS[input.source] || input.source;
+  const normalized = normalizeActivitySource(input.source);
+
+  const sourceEmoji = SOURCE_EMOJIS[normalized] || '📡';
+  const sourceLabel = SOURCE_LABELS[normalized] || input.source;
   const calText = input.calories ? ` [${input.calories}kcal]` : '';
   const deviceText = input.deviceName ? ` [${input.deviceName}]` : '';
 

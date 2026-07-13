@@ -7,7 +7,7 @@
 import type { ExternalActivityInput } from '../../types/activity';
 
 export interface MockWatchInput {
-  source: 'apple_health' | 'huawei_health';
+  source: 'healthkit' | 'health_connect';
   distanceKm: number;
   durationSec: number;
   calories?: number;
@@ -20,14 +20,14 @@ export function createMockWatchInput(params: MockWatchInput): ExternalActivityIn
   return {
     source: params.source,
     device: {
-      name: params.deviceName || (params.source === 'apple_health' ? 'Apple Watch Ultra' : 'HUAWEI WATCH GT 4'),
-      model: params.source === 'apple_health' ? 'Ultra 2' : 'GT 4',
+      name: params.deviceName || (params.source === 'healthkit' ? 'Apple Watch Ultra' : 'HUAWEI WATCH GT 4'),
+      model: params.source === 'healthkit' ? 'Ultra 2' : 'GT 4',
     },
     activityType: 'running',
     distanceKm: params.distanceKm,
     durationSec: params.durationSec,
     calories: params.calories,
     startTime: now,
-    note: `由 ${params.source === 'apple_health' ? 'Apple Watch' : '华为手表'} 同步`,
+    note: `由 ${params.source === 'healthkit' ? 'Apple Watch' : '华为手表'} 同步`,
   };
 }

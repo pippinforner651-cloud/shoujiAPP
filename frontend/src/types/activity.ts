@@ -46,6 +46,46 @@ export const SOURCE_EMOJIS: Record<ActivitySource, string> = {
   manual:         '✏️',
 };
 
+/**
+ * 旧值 → 新值映射表
+ *
+ * 转换外部系统/兼容层传来的旧 ActivitySource 值到正式枚举。
+ * 所有外部数据入库前必须先经过 normalizeActivitySource()。
+ */
+export const LEGACY_SOURCE_MAP: Record<string, ActivitySource> = {
+  apple_health:  'healthkit',
+  android_health:'health_connect',
+  gps:           'app_gps',
+  // 以下三层直接映射
+  huawei_health: 'health_connect',
+  garmin:        'health_connect',
+  xiaomi:        'health_connect',
+  mock:          'manual',
+};
+
+/** 标准化 ActivitySource — 未知来源返回 'manual' 并 console.warn */
+export function normalizeActivitySource(raw: string): ActivitySource {
+  const trimmed = raw.trim().toLowerCase();
+
+  // 直接命中正式枚举
+  const validSources: readonly string[] = [
+    'app_gps', 'health_connect', 'healthkit', 'coros',
+    'joyrun', 'wechat', 'gpx_import', 'fit_import', 'manual',
+  ];
+  if (validSources.includes(trimmed)) {
+    return trimmed as ActivitySource;
+  }
+
+  // 旧值映射
+  if (LEGACY_SOURCE_MAP[trimmed]) {
+    return LEGACY_SOURCE_MAP[trimmed];
+  }
+
+  // 未知来源
+  console.warn(`[normalizeActivitySource] 未知来源 "${raw}"，回退为 manual`);
+  return 'manual';
+}
+
 /* =========================================
  * 2. 可信度状态
  * ========================================= */
