@@ -19,6 +19,7 @@ jobs:
         with:
           node-version: 22
 
+      # SSH认证已配置，使用SSH推送
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
