@@ -6,9 +6,6 @@
 
 import { useState, useRef } from 'react';
 import { parseGpxXml, parseFitFile } from '../../services/activitySources/FileImportAdapter';
-import { useRunStore } from '../../store/runStore';
-import { getSourceLabel } from '../../services/activitySources';
-import type { AdapterResult } from '../../types/activity';
 import { adaptToRunStore } from '../../services/activitySources';
 
 type ImportStatus = 'idle' | 'parsing' | 'done' | 'error';
@@ -25,7 +22,6 @@ export default function FileImport() {
   const [logs, setLogs] = useState<ImportLog[]>([]);
   const [totalKm, setTotalKm] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const addRecord = useRunStore((s) => s.addRecord);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;

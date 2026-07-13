@@ -3,6 +3,8 @@
  *
  * 模拟从智能手表同步的运动数据。
  * 实际接入时替换为真实蓝牙/云端 API 调用。
+ *
+ * Phase 6.3 — 输出符合新 ExternalActivityInput 字段。
  */
 import type { ExternalActivityInput } from '../../types/activity';
 
@@ -19,15 +21,11 @@ export function createMockWatchInput(params: MockWatchInput): ExternalActivityIn
   const now = new Date().toISOString();
   return {
     source: params.source,
-    device: {
-      name: params.deviceName || (params.source === 'healthkit' ? 'Apple Watch Ultra' : 'HUAWEI WATCH GT 4'),
-      model: params.source === 'healthkit' ? 'Ultra 2' : 'GT 4',
-    },
-    activityType: 'running',
-    distanceKm: params.distanceKm,
-    durationSec: params.durationSec,
+    deviceName: params.deviceName || (params.source === 'healthkit' ? 'Apple Watch Ultra' : 'HUAWEI WATCH GT 4'),
+    sportType: 'running',
+    distanceMeters: params.distanceKm * 1000,
+    durationSeconds: params.durationSec,
     calories: params.calories,
     startTime: now,
-    note: `由 ${params.source === 'healthkit' ? 'Apple Watch' : '华为手表'} 同步`,
   };
 }

@@ -38,24 +38,22 @@ export function generateBatchDeviceActivities(): ExternalActivityInput[] {
     // Apple Watch - 早上 7:30
     {
       source: 'healthkit',
-      device: { name: 'Apple Watch Ultra 2', model: 'Ultra 2' },
-      activityType: 'running',
-      distanceKm: 8.2,
-      durationSec: 45 * 60 + 30,
+      sportType: 'running',
+      distanceMeters: 8200,
+      durationSeconds: 45 * 60 + 30,
       calories: 520,
       startTime: `${today}T07:30:00`,
-      note: '晨跑 · 户外',
+      deviceName: 'Apple Watch Ultra 2',
     },
     // 华为手表 - 晚上 18:00
     {
       source: 'health_connect',
-      device: { name: 'HUAWEI WATCH GT 4', model: 'GT 4' },
-      activityType: 'running',
-      distanceKm: 6.5,
-      durationSec: 38 * 60 + 15,
+      sportType: 'running',
+      distanceMeters: 6500,
+      durationSeconds: 38 * 60 + 15,
       calories: 410,
       startTime: `${today}T18:00:00`,
-      note: '夜跑 · 公园',
+      deviceName: 'HUAWEI WATCH GT 4',
     },
   ];
 }
