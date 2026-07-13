@@ -142,3 +142,17 @@ export function adaptToRunStore(input: ExternalActivityInput): AdapterResult {
 }
 
 export { AppGpsAdapter, HealthConnectAdapter, HealthKitAdapter, CorosAdapter, JoyrunAdapter, FileImportAdapter, ManualAdapter };
+
+/* =========================================
+ * 来源标签辅助函数
+ * ========================================= */
+
+import { SOURCE_LABELS, SOURCE_EMOJIS } from '../activityAdapter/types';
+
+export function getSourceLabel(source: string): string {
+  return (SOURCE_LABELS as Record<string, string>)[source] || source;
+}
+
+export function getSourceEmoji(source: string): string {
+  return (SOURCE_EMOJIS as Record<string, string>)[source] || '📡';
+}

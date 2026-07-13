@@ -7,8 +7,6 @@ import {
   createEmptySession, haversineKm, formatTime, formatPace, estimateCalories,
 } from './runState';
 import { useRunStore } from '../../store/runStore';
-import { gpsSessionToInput } from '../../services/activitySources/AppGpsAdapter';
-import { adaptToRunStore } from '../../services/activitySources';
 
 export default function RunSession() {
   const [gpsGranted, setGpsGranted] = useState<boolean | null>(null);

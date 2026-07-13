@@ -1,11 +1,9 @@
 /**
  * 运动数据适配器（V1.1 兼容层）
  *
- * 将外部系统数据转换为统一格式并写入 runStore。
- * V2.1 之后建议使用 services/activityAdapter 新适配器。
+ * Phase 6.3 — 兼容层使用 string 类型，支持新旧 ActivitySource 值。
  */
 import { useRunStore } from '../../store/runStore';
-import type { ActivitySource } from '../../types/activity';
 import { SCALE_RATIO } from '../../types/progress';
 
 /* ===== 来源名称映射 ===== */
@@ -41,7 +39,7 @@ export interface AdapterResult {
 
 /** 简易输入（兼容 V1.1 格式） */
 export interface SimpleActivityInput {
-  source: ActivitySource;
+  source: string;
   date: string;
   distanceKm: number;
   durationMin: number;
