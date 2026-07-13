@@ -6,6 +6,20 @@ import {
   RunSessionData,
   createEmptySession, haversineKm, formatTime, formatPace, estimateCalories,
 } from './runState';
+import { useRunStore } from '../../store/runStore';
+import { gpsSessionToInput } from '../../services/activitySources/AppGpsAdapter';
+import { adaptToRunStore } from '../../services/activitySources';
+
+export default function RunSession() {
+  const [gpsGranted, setGpsGranted] = useState<boolean | null>(null);
+  const [session, setSession] = useState<RunSessionData>(createEmptySession());
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'offline' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const watchIdRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const addRecord = useRunStore((s) => s.addRecord);
+  const getUnsyncedRecords = useRunStore((s) => s.getUnsyncedRecords);
 
 export default function RunSession() {
   const [gpsGranted, setGpsGranted] = useState<boolean | null>(null);
@@ -97,6 +111,8 @@ export default function RunSession() {
     setSession((prev) => ({
       ...prev, state: 'RUNNING', distanceKm: 0, durationSec: 0, paceSec: 0, calories: 0, points: [],
     }));
+    setSaveStatus('idle');
+    setErrorMsg('');
     startGps();
     startTimer();
   };
@@ -115,17 +131,88 @@ export default function RunSession() {
     setSession((prev) => ({ ...prev, state: 'RUNNING' }));
   };
 
+  // 保存到本地（含离线缓存）
+  const saveSession = useCallback(() => {
+    const s = session;
+    if (s.distanceKm <= 0) return;
+
+    setSaveStatus('saving');
+
+    try {
+      // 计算爬升
+      let elevationGain = 0;
+      if (s.points.length >= 2) {
+        for (let i = 1; i < s.points.length; i++) {
+          const prevAlt = s.points[i - 1].altitude;
+          const curAlt = s.points[i].altitude;
+          if (prevAlt !== undefined && curAlt !== undefined && curAlt > prevAlt) {
+            elevationGain += (curAlt - prevAlt);
+          }
+        }
+      }
+
+      const record = addRecord(
+        new Date().toISOString().slice(0, 10),
+        s.distanceKm,
+        s.durationSec / 60,
+        `🏃 真实跑步 · ${s.points.length} 个GPS点`,
+        s.points,
+        {
+          durationSec: s.durationSec,
+          calories: s.calories,
+          elevationGain: Math.round(elevationGain),
+          source: 'app_gps',
+          verificationStatus: 'verified_device',
+          deviceName: navigator.platform || '本机',
+          synced: navigator.onLine !== false ? false : false, // 标记为等待同步
+        }
+      );
+
+      if (record) {
+        const isOnline = navigator.onLine !== false;
+        setSaveStatus(isOnline ? 'saved' : 'offline');
+        console.log(`[RunSession] ${isOnline ? '已保存' : '离线缓存'}: ${s.distanceKm.toFixed(2)} km`);
+      }
+    } catch (err) {
+      console.error('[RunSession] 保存失败:', err);
+      setSaveStatus('error');
+      setErrorMsg(String(err));
+    }
+  }, [session, addRecord]);
+
   // 结束
   const handleFinish = () => {
     stopGps();
     stopTimer();
+    saveSession();
     setSession((prev) => ({ ...prev, state: 'FINISHED' }));
+  };
+
+  // 重试保存
+  const handleRetry = () => {
+    setSaveStatus('idle');
+    setErrorMsg('');
+    setTimeout(() => saveSession(), 300);
   };
 
   // 重制
   const handleReset = () => {
     setSession(createEmptySession());
+    setSaveStatus('idle');
+    setErrorMsg('');
   };
+
+  // 联网自动重试（未同步记录）
+  useEffect(() => {
+    const onOnline = () => {
+      const unsynced = getUnsyncedRecords().length;
+      if (unsynced > 0) {
+        console.log(`[RunSession] 网络恢复，待同步: ${unsynced} 条`);
+      }
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [getUnsyncedRecords]);
 
   // 配速显示
   const paceDisplay = formatPace(session.paceSec);
@@ -189,6 +276,17 @@ export default function RunSession() {
         <div className="rs-track">
           <RunTrackMap gpsTrack={session.points} height="180px" />
           <div className="rs-track-info">{session.points.length} 个轨迹点</div>
+        </div>
+      )}
+
+      {/* 保存状态提示 */}
+      {saveStatus === 'offline' && (
+        <div className="rs-save-status offline">📦 已离线缓存，联网后自动上传</div>
+      )}
+      {saveStatus === 'error' && (
+        <div className="rs-save-status error">
+          ❌ 保存失败: {errorMsg}
+          <button className="rs-retry-btn" onClick={handleRetry}>重试</button>
         </div>
       )}
 

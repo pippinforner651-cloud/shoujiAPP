@@ -1,9 +1,8 @@
 /* 跑步数据模型 */
 
-import type { ActivitySource, DeviceInfo, ActivityType } from './activity';
-import type { GpsPoint } from './gps';
+import type { ActivitySource, VerificationStatus } from './activity';
 
-/** 单条跑步记录（扩展：含来源、设备、GPS 轨迹） */
+/** 单条跑步记录（Phase 6.3 扩展） */
 export interface RunRecord {
   /** 唯一 ID */
   id: string;
@@ -19,16 +18,38 @@ export interface RunRecord {
   createdAt: string;
   /** 可选备注 */
   note?: string;
-  /** 数据来源（扩展字段，V2.1） */
+  /** 数据来源（Phase 6.3 扩展 9 种） */
   source?: ActivitySource;
-  /** 设备信息（扩展字段，V2.1） */
-  device?: DeviceInfo;
-  /** 运动类型（扩展字段，V2.1） */
-  activityType?: ActivityType;
-  /** 消耗热量（千卡，扩展字段，V2.1） */
+  /** 运动类型 */
+  sportType?: string;
+  /** 消耗热量（千卡） */
   calories?: number;
-  /** GPS 轨迹点（扩展字段，V2.2） */
-  gpsTrack?: GpsPoint[];
+  /** GPS 轨迹点 */
+  gpsTrack?: Array<{ latitude: number; longitude: number; timestamp: string; altitude?: number; speed?: number }>;
+
+  /* Phase 6.3 新增字段 */
+  /** 运动时长（秒，替代 durationMin 的精确值） */
+  durationSec?: number;
+  /** 平均心率 */
+  avgHeartRate?: number;
+  /** 最大心率 */
+  maxHeartRate?: number;
+  /** 累计爬升（米） */
+  elevationGain?: number;
+  /** 设备名称 */
+  deviceName?: string;
+  /** 数据可信度 */
+  verificationStatus?: VerificationStatus;
+  /** 去重哈希 */
+  rawDataHash?: string;
+  /** 是否已同步到云端 */
+  synced?: boolean;
+  /** 是否离线缓存的记录（未联网时创建的） */
+  offline?: boolean;
+  /** 同步失败重试次数 */
+  retryCount?: number;
+  /** 上次同步尝试时间 */
+  lastSyncAttempt?: string;
 }
 
 /** 跑步统计数据摘要 */

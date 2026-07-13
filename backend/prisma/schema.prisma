@@ -176,21 +176,50 @@ model InviteCode {
 }
 
 model Activity {
-  id            String   @id
-  userId        String   @map("user_id")
-  source        String   @default("manual")
-  activityType  String   @default("running") @map("activity_type")
-  distanceKm    Float    @map("distance_km")
-  durationSec   Int      @map("duration_sec")
-  paceSec       Float    @map("pace_sec")
-  calories      Int?
-  startTime     DateTime @map("start_time")
-  gpsTrack      Json?    @map("gps_track")
-  note          String?
-  createdAt     DateTime @default(now()) @map("created_at")
+  id                   String    @id
+  userId               String    @map("user_id")
+  source               String    @default("app_gps")
+  sourceActivityId     String?   @map("source_activity_id")
+  sportType            String    @default("running") @map("sport_type")
+
+  // 时间
+  startTime            DateTime  @map("start_time")
+  endTime              DateTime? @map("end_time")
+  durationSeconds      Int       @map("duration_seconds")
+
+  // 距离 & 配速
+  distanceMeters       Float     @map("distance_meters")
+  paceSecondsPerKm     Float     @map("pace_seconds_per_km")
+
+  // 扩展指标
+  calories             Int?
+  avgHeartRate         Int?      @map("avg_heart_rate")
+  maxHeartRate         Int?      @map("max_heart_rate")
+  elevationGain        Float?    @map("elevation_gain")
+
+  // 轨迹（JSON: RoutePoint[]）
+  routeData            Json?     @map("route_data")
+
+  // 设备
+  deviceName           String?   @map("device_name")
+
+  // 同步
+  syncTime             DateTime? @map("sync_time")
+
+  // 可信度
+  verificationStatus   String    @default("verified_device") @map("verification_status")
+
+  // 去重
+  rawDataHash          String?   @map("raw_data_hash")
+
+  // 时间戳
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id])
   @@index([userId, startTime(sort: Desc)])
+  @@index([sourceActivityId])
+  @@index([rawDataHash])
   @@map("activities")
 }
 

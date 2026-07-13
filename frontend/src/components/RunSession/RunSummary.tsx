@@ -20,13 +20,20 @@ export default function RunSummary({ session, onReset }: Props) {
     if (hasUploaded.current || session.distanceKm <= 0) return;
     hasUploaded.current = true;
 
-    // 自动上传到 runStore（模拟 POST /v1/activities）
+    // 自动上传到 runStore
     const record = addRecord(
       new Date().toISOString().slice(0, 10),
       session.distanceKm,
       session.durationSec / 60,
       `🏃 真实跑步 · ${session.points.length} 个GPS点`,
       session.points,
+      {
+        durationSec: session.durationSec,
+        calories: session.calories,
+        source: 'app_gps',
+        verificationStatus: 'verified_device',
+        deviceName: navigator.platform || '本机',
+      }
     );
 
     if (record) {
@@ -83,6 +90,11 @@ export default function RunSummary({ session, onReset }: Props) {
           <div className="rss-val">{session.points.length}</div>
           <div className="rss-label">GPS 点</div>
         </div>
+      </div>
+
+      {/* 数据可信度标签 */}
+      <div className="rs-verification-badge">
+        ✅ 设备直录 · 可信数据（计入排行榜）
       </div>
 
       {/* GPS 轨迹 */}

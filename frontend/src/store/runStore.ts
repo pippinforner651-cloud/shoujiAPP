@@ -94,12 +94,17 @@ interface RunState {
   initialized: boolean;
 
   initialize: () => void;
-  addRecord: (date: string, distanceKm: number, durationMin: number, note?: string, gpsTrack?: GpsPoint[]) => RunRecord;
+  addRecord: (date: string, distanceKm: number, durationMin: number, note?: string, gpsTrack?: GpsPoint[], extra?: Partial<RunRecord>) => RunRecord;
   removeRecord: (id: string) => void;
   clearAll: () => void;
   getRecordsByDate: (date: string) => RunRecord[];
   recalcStats: () => void;
   getTodayActivities: () => TodayActivities;
+  // Phase 6.3 新增
+  getUnsyncedRecords: () => RunRecord[];
+  markSynced: (id: string) => void;
+  incrementRetry: (id: string) => void;
+  getPendingRetryRecords: () => RunRecord[];
 }
 
 export const useRunStore = create<RunState>((set, get) => ({
@@ -114,7 +119,7 @@ export const useRunStore = create<RunState>((set, get) => ({
     set({ records, stats, initialized: true });
   },
 
-  addRecord: (date, distanceKm, durationMin, note, gpsTrack) => {
+  addRecord: (date, distanceKm, durationMin, note, gpsTrack, extra) => {
     const pace = distanceKm > 0
       ? Math.round((durationMin / distanceKm) * 100) / 100 : 0;
 
@@ -126,9 +131,10 @@ export const useRunStore = create<RunState>((set, get) => ({
       pace,
       createdAt: new Date().toISOString(),
       note,
-      source: 'manual',
-      activityType: 'running',
+      source: 'app_gps',
+      sportType: 'running',
       gpsTrack,
+      ...(extra || {}),
     };
 
     const records = [...get().records, record];
@@ -173,7 +179,7 @@ export const useRunStore = create<RunState>((set, get) => ({
     const avgPace = avgPaceSec > 0
       ? `${Math.floor(avgPaceSec)}'${Math.round((avgPaceSec - Math.floor(avgPaceSec)) * 60).toString().padStart(2, '0')}"`
       : '--';
-    const sources = [...new Set(todayRecords.map((r) => r.source || 'manual'))];
+    const sources = [...new Set(todayRecords.map((r) => r.source || 'app_gps'))];
 
     // GPS 统计
     const gpsRecords = todayRecords.filter((r) => r.gpsTrack && r.gpsTrack.length > 0);
@@ -182,5 +188,33 @@ export const useRunStore = create<RunState>((set, get) => ({
     const latestGpsTrack = gpsRecords[gpsRecords.length - 1]?.gpsTrack;
 
     return { count, totalKm, totalMin, avgPace, totalCal, sources, gpsCount, gpsPoints, latestGpsTrack };
+  },
+
+  /* Phase 6.3 — 离线缓存 & 同步重试 */
+
+  getUnsyncedRecords: () => {
+    return get().records.filter((r) => r.synced !== true);
+  },
+
+  markSynced: (id) => {
+    const records = get().records.map((r) =>
+      r.id === id ? { ...r, synced: true, retryCount: 0 } : r
+    );
+    saveToStorage(records);
+    set({ records });
+  },
+
+  incrementRetry: (id) => {
+    const records = get().records.map((r) =>
+      r.id === id
+        ? { ...r, retryCount: (r.retryCount || 0) + 1, lastSyncAttempt: new Date().toISOString() }
+        : r
+    );
+    saveToStorage(records);
+    set({ records });
+  },
+
+  getPendingRetryRecords: () => {
+    return get().records.filter((r) => r.synced !== true && (r.retryCount || 0) < 5);
   },
 }));
