@@ -1,11 +1,12 @@
 /**
  * REST API 客户端
  *
- * 统一 HTTP 请求封装。
- * 当前为 Mock 实现，切换真实后端时只需修改 BASE_URL。
+ * Phase 6.3.2 — 统一使用 config/api.ts 中的 API_BASE_URL。
+ * - 开发环境无 VITE_API_BASE_URL → Mock 模式
+ * - 生产环境有 VITE_API_BASE_URL → 真实 HTTPS 请求
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+import { API_BASE_URL, REQUEST_TIMEOUT } from '../../config/api';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
@@ -23,24 +24,29 @@ async function request<T>(
   body?: unknown,
   headers?: Record<string, string>
 ): Promise<ApiResponse<T>> {
-  const url = `${BASE_URL}${path}`;
+  const url = `${API_BASE_URL}${path}`;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
     const options: RequestInit = {
       method,
       headers: {
         'Content-Type': 'application/json',
         ...headers,
       },
+      signal: controller.signal,
     };
 
     if (body && method !== 'GET') {
       options.body = JSON.stringify(body);
     }
 
-    if (!BASE_URL) {
+    if (!API_BASE_URL || API_BASE_URL === 'http://localhost:3001') {
       // Mock 模式：不发送真实请求，打印日志
       console.log(`[API/Mock] ${method} ${url}`, body || '');
+      clearTimeout(timeoutId);
       return {
         success: true,
         statusCode: 200,
@@ -49,6 +55,7 @@ async function request<T>(
     }
 
     const response = await fetch(url, options);
+    clearTimeout(timeoutId);
     const json = await response.json();
 
     if (!response.ok) {

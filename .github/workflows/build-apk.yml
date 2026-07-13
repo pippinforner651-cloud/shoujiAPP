@@ -1,7 +1,13 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'API Base URL (e.g. https://chinarun-api.onrender.com)'
+        required: false
+        default: ''
+        type: string
   push:
     branches: [main, master, release]
 
@@ -28,6 +34,13 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Set API Base URL
+        run: |
+          # 优先级: 手动输入 > GitHub变量 > 默认值
+          API_URL="${{ inputs.api_base_url || vars.VITE_API_BASE_URL || 'https://chinarun-api.onrender.com' }}"
+          echo "VITE_API_BASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "Using API: $API_URL"
 
       - name: Install Dependencies
         working-directory: frontend
