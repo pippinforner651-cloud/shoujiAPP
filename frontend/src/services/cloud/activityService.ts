@@ -16,7 +16,7 @@ export async function uploadActivity(
     id: record.id,
     user_id: record.source === 'manual' ? 'guest' : record.source,
     source: record.source || 'manual',
-    activity_type: record.activityType || 'running',
+    activity_type: (record as unknown as Record<string, unknown>).sportType as string || 'running',
     distance_km: record.distanceKm,
     duration_sec: Math.round(record.durationMin * 60),
     pace_sec: record.pace > 0 ? Math.round(record.pace * 60) : undefined,
@@ -45,7 +45,7 @@ export async function uploadActivities(
       activities: records.map((r) => ({
         id: r.id,
         source: r.source || 'manual',
-        activity_type: r.activityType || 'running',
+        activity_type: (r as unknown as Record<string, unknown>).sportType as string || 'running',
         distance_km: r.distanceKm,
         duration_sec: Math.round(r.durationMin * 60),
         pace_sec: r.pace > 0 ? Math.round(r.pace * 60) : undefined,

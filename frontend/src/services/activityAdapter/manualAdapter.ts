@@ -14,10 +14,9 @@ export interface ManualInput {
 export function parseManualInput(input: ManualInput): ExternalActivityInput {
   return {
     source: 'manual',
-    activityType: 'running',
-    distanceKm: input.distanceKm,
-    durationSec: input.durationMin * 60,
+    sportType: 'running',
+    distanceMeters: input.distanceKm * 1000,
+    durationSeconds: input.durationMin * 60,
     startTime: `${input.date}T00:00:00`,
-    note: input.note || '',
   };
 }

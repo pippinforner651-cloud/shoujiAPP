@@ -1,20 +1,22 @@
 /**
- * 活动适配器入口
+ * 活动适配器入口（V1.1 兼容层）
  *
- * 统一接口：将 ExternalActivityInput 转换为 RunRecord 并写入 runStore。
- * 不同来源的适配器在此注册。
+ * Phase 6.3 — 适配新的 ExternalActivityInput 字段名。
  */
 import { useRunStore } from '../../store/runStore';
 import type { ExternalActivityInput } from '../../types/activity';
+import { normalizeActivitySource } from '../../types/activity';
 import { SOURCE_LABELS, SOURCE_EMOJIS } from './types';
 
 /** 来源标签 */
 export function getSourceLabel(source: string): string {
-  return SOURCE_LABELS[source as keyof typeof SOURCE_LABELS] || source;
+  const normalized = normalizeActivitySource(source);
+  return SOURCE_LABELS[normalized] || source;
 }
 
 export function getSourceEmoji(source: string): string {
-  return SOURCE_EMOJIS[source as keyof typeof SOURCE_EMOJIS] || '📡';
+  const normalized = normalizeActivitySource(source);
+  return SOURCE_EMOJIS[normalized] || '📡';
 }
 
 /** 适配器结果 */
@@ -27,36 +29,36 @@ export interface AdaptResult {
 
 /** 将 ExternalActivityInput 写入 runStore */
 export function adaptToRunStore(input: ExternalActivityInput): AdaptResult {
-  if (!input.distanceKm || input.distanceKm <= 0) {
+  const km = input.distanceMeters / 1000;
+  if (km <= 0) {
     return { success: false, error: '距离必须大于 0' };
   }
 
   // 转换单位
-  const durationMin = input.durationSec / 60;
+  const durationMin = input.durationSeconds / 60;
   const date = input.startTime.slice(0, 10);
   const sourceLabel = getSourceLabel(input.source);
   const sourceEmoji = getSourceEmoji(input.source);
   const calText = input.calories ? ` [${input.calories}kcal]` : '';
-  const deviceText = input.device?.name ? ` [${input.device.name}]` : '';
-  const noteText = input.note ? ` ${input.note}` : '';
+  const deviceText = input.deviceName ? ` [${input.deviceName}]` : '';
 
   const record = useRunStore.getState().addRecord(
     date,
-    input.distanceKm,
+    km,
     durationMin,
-    `[${sourceEmoji}${sourceLabel}]${calText}${deviceText}${noteText}`.trim()
+    `[${sourceEmoji}${sourceLabel}]${calText}${deviceText}`.trim()
   );
 
-  // 更新扩展字段（通过 localStorage 直接写入）
+  // 更新扩展字段
   try {
     const storage = JSON.parse(localStorage.getItem('vr_china_run_v1') || '{}');
     if (storage.records) {
       const idx = storage.records.findIndex((r: { id: string }) => r.id === record.id);
       if (idx >= 0) {
         storage.records[idx].source = input.source;
-        storage.records[idx].device = input.device;
-        storage.records[idx].activityType = input.activityType;
+        storage.records[idx].sportType = input.sportType;
         storage.records[idx].calories = input.calories;
+        storage.records[idx].deviceName = input.deviceName;
         localStorage.setItem('vr_china_run_v1', JSON.stringify(storage));
       }
     }
@@ -66,7 +68,7 @@ export function adaptToRunStore(input: ExternalActivityInput): AdaptResult {
   return {
     success: true,
     recordId: record.id,
-    virtualKm: Math.round(input.distanceKm * 10 * 100) / 100,
+    virtualKm: Math.round(km * 10 * 100) / 100,
   };
 }
 

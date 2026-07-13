@@ -65,8 +65,7 @@ function matchByTimeAndDistance(input: DuplicateCheckInput, records: RunRecord[]
   for (const r of records) {
     const rDate = new Date(r.date + 'T00:00:00').getTime();
     // 检查是否同一天
-    const inputDate = new Date(input.startTime).getTime();
-    const inputDay = new Date(inputDate).setHours(0, 0, 0, 0);
+    const inputDay = new Date(inputTime).setHours(0, 0, 0, 0);
 
     if (Math.abs(rDate - inputDay) > 86400000) continue; // 不同天，跳过
 

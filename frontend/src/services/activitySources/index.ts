@@ -11,6 +11,8 @@ import type {
   AdapterResult,
   UnifiedActivity,
 } from '../../types/activity';
+import { normalizeActivitySource, simpleHash, toVirtualKm } from '../../types/activity';
+import { useRunStore } from '../../store/runStore';
 import { AppGpsAdapter } from './AppGpsAdapter';
 import { HealthConnectAdapter } from './HealthConnectAdapter';
 import { HealthKitAdapter } from './HealthKitAdapter';
@@ -80,15 +82,11 @@ registerAdapter(new ManualAdapter());
  * 入口函数：将外部输入写入 runStore
  * ========================================= */
 
-import { useRunStore } from '../../store/runStore';
-import { simpleHash, toVirtualKm, calcPaceSecPerKm } from '../../types/activity';
-
 export function adaptToRunStore(input: ExternalActivityInput): AdapterResult {
   if (!input.distanceMeters || input.distanceMeters <= 0) {
     return { success: false, error: '距离必须大于 0' };
   }
 
-  const pace = input.paceSecondsPerKm || calcPaceSecPerKm(input.distanceMeters, input.durationSeconds);
   const hash = input.rawDataHash || simpleHash(input);
 
   // 去重检查
@@ -148,8 +146,6 @@ export { AppGpsAdapter, HealthConnectAdapter, HealthKitAdapter, CorosAdapter, Jo
  * ========================================= */
 
 import { SOURCE_LABELS, SOURCE_EMOJIS } from '../activityAdapter/types';
-import type { ActivitySource } from '../../types/activity';
-import { normalizeActivitySource } from '../../types/activity';
 
 export function getSourceLabel(source: string): string {
   const normalized = normalizeActivitySource(source);

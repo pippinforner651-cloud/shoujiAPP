@@ -4,7 +4,6 @@
  * Phase 6.3 — 外部旧值通过 normalizeActivitySource 转换后再入库。
  */
 import { useRunStore } from '../../store/runStore';
-import type { ActivitySource } from '../../types/activity';
 import { normalizeActivitySource } from '../../types/activity';
 import { SCALE_RATIO } from '../../types/progress';
 
