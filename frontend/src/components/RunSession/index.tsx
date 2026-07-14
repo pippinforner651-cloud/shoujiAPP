@@ -10,9 +10,11 @@ import { useRunStore } from '../../store/runStore';
 import type { RunRecord } from '../../types/run';
 import { calculateRouteProgress } from '../../utils/routeProgress';
 import { buildRunSummary, type CompletedRunSummary, type ManualRunInput, type RouteSnapshot } from '../../utils/runFlow';
+import { buildHomeJourney } from '../../utils/homeJourney';
+import { filterUnseenMilestones, findNewMilestones, MILESTONE_STORAGE_KEY, type CoreMilestone } from '../../utils/milestoneFeedback';
 
 interface Props { onBackHome?: () => void; onViewMap?: () => void; }
-interface CompletedRun { record: RunRecord; summary: CompletedRunSummary; routeAfter: RouteSnapshot; }
+interface CompletedRun { record: RunRecord; summary: CompletedRunSummary; routeAfter: RouteSnapshot; milestones: CoreMilestone[]; }
 
 function routeSnapshot(actualKm: number): RouteSnapshot {
   const progress = calculateRouteProgress(actualKm);
@@ -62,7 +64,10 @@ export default function RunSession({ onBackHome = () => undefined, onViewMap = (
     setSaving(true);
     setErrorMsg('');
     try {
-      const beforeActualKm = useRunStore.getState().stats.totalDistanceKm;
+      const beforeRunState = useRunStore.getState();
+      const beforeActualKm = beforeRunState.stats.totalDistanceKm;
+      const beforeHome = buildHomeJourney(beforeRunState.records);
+      const beforeCityCount = useCityStore.getState().unlockedCities.length;
       const before = routeSnapshot(beforeActualKm);
       const source = gpsTrack.length > 0 ? 'app_gps' : 'manual';
       const record = addRecord(input.date, input.distanceKm, input.durationMin, input.note, gpsTrack, {
@@ -76,8 +81,19 @@ export default function RunSession({ onBackHome = () => undefined, onViewMap = (
       });
       const afterActualKm = beforeActualKm + record.distanceKm;
       const after = routeSnapshot(afterActualKm);
-      checkAndUnlock(afterActualKm);
-      setCompleted({ record, summary: buildRunSummary(record, before, after), routeAfter: after });
+      const newCities = checkAndUnlock(afterActualKm);
+      const afterHome = buildHomeJourney([...beforeRunState.records, record]);
+      const crossed = findNewMilestones(
+        { totalKm: beforeActualKm, streakDays: beforeHome.streakDays, unlockedCityCount: beforeCityCount },
+        { totalKm: afterActualKm, streakDays: afterHome.streakDays, unlockedCityCount: beforeCityCount + newCities.length },
+      );
+      let seenIds: string[] = [];
+      try { seenIds = JSON.parse(localStorage.getItem(MILESTONE_STORAGE_KEY) || '[]') as string[]; } catch { seenIds = []; }
+      const milestones = filterUnseenMilestones(crossed, seenIds);
+      if (milestones.length > 0) {
+        localStorage.setItem(MILESTONE_STORAGE_KEY, JSON.stringify([...new Set([...seenIds, ...milestones.map((item) => item.id)])]));
+      }
+      setCompleted({ record, summary: buildRunSummary(record, before, after), routeAfter: after, milestones });
     } catch (error) {
       setErrorMsg(`保存失败：${String(error)}`);
     } finally {

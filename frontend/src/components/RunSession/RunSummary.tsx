@@ -2,11 +2,13 @@ import E23Icon from '../E23Icon';
 import RunTrackMap from '../RunTrackMap';
 import type { RunRecord } from '../../types/run';
 import type { CompletedRunSummary, RouteSnapshot } from '../../utils/runFlow';
+import type { CoreMilestone } from '../../utils/milestoneFeedback';
 
 interface Props {
   record: RunRecord;
   summary: CompletedRunSummary;
   routeAfter: RouteSnapshot;
+  milestones: CoreMilestone[];
   onReset: () => void;
   onBackHome: () => void;
   onViewMap: () => void;
@@ -20,7 +22,7 @@ function durationLabel(minutes: number) {
   return hours > 0 ? `${hours}小时${mins}分` : `${mins}分${String(seconds).padStart(2, '0')}秒`;
 }
 
-export default function RunSummary({ record, summary, routeAfter, onReset, onBackHome, onViewMap }: Props) {
+export default function RunSummary({ record, summary, routeAfter, milestones, onReset, onBackHome, onViewMap }: Props) {
   const isManual = record.source === 'manual';
   return (
     <section className="run-summary-v1">
@@ -56,6 +58,11 @@ export default function RunSummary({ record, summary, routeAfter, onReset, onBac
           <div><span>本次缩短</span><strong>{summary.remainingReducedKm.toFixed(0)} 虚拟km</strong></div>
         </div>
       </div>
+
+      {milestones.length > 0 && <div className="summary-milestones">
+        <div className="summary-section-title">本次新里程碑</div>
+        {milestones.map((milestone) => <article key={milestone.id}><div><E23Icon name="route" size={18} /></div><span><strong>{milestone.name}</strong><small>{milestone.description}</small></span></article>)}
+      </div>}
 
       <div className="summary-actions">
         <button className="primary-action" onClick={onBackHome}>返回旅程首页</button>

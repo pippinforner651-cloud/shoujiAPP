@@ -159,6 +159,32 @@
   .next-motivation-card button { width: 100%; }
 }
 
+/* ---- V1 城市到站与里程碑 ---- */
+.bts-overlay { border: 0; }
+.bts-panel.arrival-panel { box-sizing: border-box; max-width: 520px; left: 50%; padding: 10px 20px calc(22px + var(--sab)); color: var(--e23-ink); background: #fff; border-radius: 28px 28px 0 0; transform: translate(-50%, 110%); }
+.bts-panel.arrival-panel.show { transform: translate(-50%, 0); }
+.arrival-badge { display: grid; place-items: center; width: 58px; height: 58px; margin: 4px 0 14px; color: #fff; border-radius: 19px; background: linear-gradient(145deg, var(--e23-primary), var(--e23-primary-strong)); box-shadow: 0 12px 24px rgba(242,140,34,.25); }
+.arrival-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.arrival-title h2 { margin: 0; font-size: 30px; letter-spacing: -.04em; }
+.arrival-title span { color: var(--e23-muted); font-size: 11px; }
+.arrival-title > strong { padding: 7px 9px; color: var(--e23-route); background: #EAF2FF; border-radius: 999px; font-size: 10px; }
+.arrival-message { margin: 16px 0; color: var(--e23-muted); font-size: 13px; line-height: 1.7; }
+.arrival-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.arrival-metrics div, .arrival-next-card > div { padding: 13px; border-radius: 14px; background: #F7F9FC; }
+.arrival-metrics span, .arrival-next-card span { display: block; color: var(--e23-muted); font-size: 9px; }
+.arrival-metrics strong, .arrival-next-card strong { display: block; margin-top: 5px; font-size: 14px; }
+.arrival-next-card { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 9px; padding: 9px; border: 1px solid #D8E7FF; border-radius: 17px; background: #F4F8FF; }
+.arrival-next-card > div { background: transparent; }
+.arrival-next-card strong { color: var(--e23-route); }
+.arrival-panel .bts-close { min-height: 50px; margin-top: 16px; border: 0; border-radius: 15px; background: var(--e23-primary); font-weight: 800; }
+.summary-milestones { margin-top: 14px; padding: 18px; border-radius: 20px; background: #FFF8EF; border: 1px solid #FBE4C5; }
+.summary-milestones article { display: flex; align-items: center; gap: 11px; padding: 11px 0; border-top: 1px solid #F3DFC4; }
+.summary-milestones article:first-of-type { border-top: 0; }
+.summary-milestones article > div { display: grid; place-items: center; width: 38px; height: 38px; color: var(--e23-primary); background: #fff; border-radius: 12px; }
+.summary-milestones article > span { display: grid; gap: 3px; }
+.summary-milestones strong { font-size: 13px; }
+.summary-milestones small { color: var(--e23-muted); font-size: 10px; }
+
 /* ---- V1 跑步录入与总结闭环 ---- */
 .run-session-v1 { min-height: 100%; padding: calc(18px + var(--sat)) 16px calc(96px + var(--sab)); color: var(--e23-ink); background: var(--e23-canvas); }
 .run-mode-header { display: grid; gap: 16px; margin-bottom: 14px; }
