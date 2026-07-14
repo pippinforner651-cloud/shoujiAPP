@@ -11,7 +11,7 @@
 import { create } from 'zustand';
 import type { AvatarType } from '../types/user';
 import { DEFAULT_NICKNAME, USER_STORAGE_KEY, USER_STORAGE_VERSION } from '../types/user';
-import { post } from '../services/cloud/apiClient';
+import { validatePhone, verifyTestCode } from '../utils/authCore';
 
 /* ===== 工具 ===== */
 function generateId(): string {
@@ -132,29 +132,9 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   phoneLogin: async (phone, code) => {
-    if (code !== loginMockCode) return { success: false, error: '验证码错误' };
-
-    const res = await post<{ user_id: string; nickname: string; token: string }>(
-      '/auth/phone/login', { phone, code }
-    );
-
-    if (res.success && res.data) {
-      const updated: AppAccount = {
-        ...get().account,
-        id: res.data.user_id,
-        nickname: res.data.nickname,
-        phone,
-        isGuest: false,
-        isLogin: true,
-        token: res.data.token,
-        loginType: 'phone',
-      };
-      saveAccount(updated);
-      set({ account: updated });
-      return { success: true };
-    }
-
-    const mockId = `phone_${Date.now().toString(36)}`;
+    if (!validatePhone(phone)) return { success: false, error: '请输入正确的11位手机号码。' };
+    if (!verifyTestCode(code)) return { success: false, error: '测试验证码应为 123456。' };
+    const mockId = `local_${Date.now().toString(36)}`;
     const updated: AppAccount = {
       ...get().account,
       id: mockId,
@@ -162,7 +142,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       phone,
       isGuest: false,
       isLogin: true,
-      token: `mock_token_${mockId}`,
+      token: `local_test_session_${mockId}`,
       loginType: 'phone',
     };
     saveAccount(updated);
@@ -171,30 +151,9 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   phoneRegister: async (phone, code, realName) => {
-    if (code !== loginMockCode) return { success: false, error: '验证码错误' };
-
-    const res = await post<{ user_id: string; nickname: string; token: string }>(
-      '/auth/phone/register', { phone, code, real_name: realName, nickname: '环游跑者' }
-    );
-
-    if (res.success && res.data) {
-      const updated: AppAccount = {
-        ...get().account,
-        id: res.data.user_id,
-        nickname: res.data.nickname,
-        realName,
-        phone,
-        isGuest: false,
-        isLogin: true,
-        token: res.data.token,
-        loginType: 'phone',
-      };
-      saveAccount(updated);
-      set({ account: updated });
-      return { success: true };
-    }
-
-    const mockId = `phone_${Date.now().toString(36)}`;
+    if (!validatePhone(phone)) return { success: false, error: '请输入正确的11位手机号码。' };
+    if (!verifyTestCode(code)) return { success: false, error: '测试验证码应为 123456。' };
+    const mockId = `local_${Date.now().toString(36)}`;
     const updated: AppAccount = {
       ...get().account,
       id: mockId,
@@ -203,7 +162,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       phone,
       isGuest: false,
       isLogin: true,
-      token: `mock_token_${mockId}`,
+      token: `local_test_session_${mockId}`,
       loginType: 'phone',
     };
     saveAccount(updated);
@@ -212,23 +171,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   wechatLogin: async () => {
-    const mockOpenid = `wx_mock_${Date.now().toString(36)}`;
-    const mockId = `wechat_${Date.now().toString(36)}`;
-    const updated: AppAccount = {
-      ...get().account,
-      id: mockId,
-      nickname: '微信用户',
-      wechatNickname: '微信用户',
-      wechatOpenid: mockOpenid,
-      wechatAvatar: 'https://mock.avatar/default.png',
-      isGuest: false,
-      isLogin: true,
-      token: `mock_token_${mockId}`,
-      loginType: 'wechat',
-    };
-    saveAccount(updated);
-    set({ account: updated });
-    return { success: true };
+    return { success: false, error: '微信登录尚未接入，本测试版不会模拟授权成功。' };
   },
 
   logout: () => {

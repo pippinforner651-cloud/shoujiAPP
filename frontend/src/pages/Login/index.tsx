@@ -1,191 +1,102 @@
-import { useState, useRef } from 'react';
-import { useUserStore } from '../../store/userStore';
-import { mockSmsAdapter } from '../../services/sms/mockSms';
+import { useState } from 'react';
+import E23Icon from '../../components/E23Icon';
 import { BRAND } from '../../config/brand';
+import { useUserStore } from '../../store/userStore';
+import { validatePhone } from '../../utils/authCore';
+import { AuthAgreement, TestModeNotice, useTestCode } from '../AuthShared';
 
-interface Props {
-  onGoToRegister: () => void;
-  onLoginSuccess: () => void;
-}
-
-function BrandMark({ size = 72 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 200 200" style={{ width: size, height: size }}>
-      <defs>
-        <linearGradient id="loginBgGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#0D2B45" />
-          <stop offset="100%" stopColor="#1E3A5F" />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="200" height="200" rx="44" ry="44" fill="url(#loginBgGrad)" />
-      <ellipse cx="100" cy="160" rx="120" ry="40" fill="#F28C22" />
-      <ellipse cx="80" cy="145" rx="80" ry="35" fill="#FAD7A0" />
-      <ellipse cx="100" cy="135" rx="55" ry="30" fill="#FFF4E0" />
-      <circle cx="100" cy="110" r="18" fill="#FFE6B4" opacity="0.85" />
-      <text x="100" y="48" textAnchor="middle" fill="#FFFFFF" fontSize="40" fontWeight="900" fontFamily="Arial Black, sans-serif">E23</text>
-      <text x="100" y="72" textAnchor="middle" fill="#FFFFFF" fontSize="12" fontWeight="700">跑起来</text>
-      <g fill="#0D2B45">
-        <circle cx="115" cy="148" r="3.5" />
-        <path d="M115 151 L118 162 L116 170 M118 162 L112 168 M118 162 L123 167" stroke="#0D2B45" strokeWidth="1.5" fill="none" />
-        <circle cx="92" cy="150" r="3" />
-        <path d="M92 153 L94 162 L92 170 M94 162 L89 168 M94 162 L98 167" stroke="#0D2B45" strokeWidth="1.3" fill="none" />
-        <circle cx="72" cy="152" r="2.5" />
-        <path d="M72 154 L74 162 L72 169 M74 162 L70 168 M74 162 L77 167" stroke="#0D2B45" strokeWidth="1.1" fill="none" />
-      </g>
-    </svg>
-  );
-}
+interface Props { onGoToRegister: () => void; onLoginSuccess: () => void; }
 
 export default function Login({ onGoToRegister, onLoginSuccess }: Props) {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [codeMsg, setCodeMsg] = useState('');
-  const [countdown, setCountdown] = useState(0);
   const [showWechatDialog, setShowWechatDialog] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const phoneLogin = useUserStore((state) => state.phoneLogin);
+  const testCode = useTestCode(phone, setCode);
 
-  const { phoneLogin, wechatLogin } = useUserStore();
-
-  const handleSendCode = async () => {
-    if (!phone) { setError(BRAND.AUTH.errorPhone); return; }
-    if (countdown > 0) return;
-    setError('');
-    setCodeMsg('');
-
-    await mockSmsAdapter.sendCode(phone);
-    setCodeMsg(BRAND.AUTH.testCodeMsg);
-
-    setCountdown(60);
-    timerRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+  const handleRequestCode = () => {
+    const result = testCode.requestCode();
+    setError(result.error);
   };
 
   const handleLogin = async () => {
-    if (!phone) { setError(BRAND.AUTH.errorPhone); return; }
-    if (!code) { setError(BRAND.AUTH.errorCode); return; }
+    if (!validatePhone(phone)) return setError('请输入正确的11位手机号码。');
+    if (!code) return setError('请输入测试验证码。');
+    if (!agreed) return setError('请先阅读并同意用户协议和隐私政策。');
     setLoading(true);
     setError('');
-
     const result = await phoneLogin(phone, code);
     setLoading(false);
-
-    if (result.success) {
-      onLoginSuccess();
-    } else {
-      setError(BRAND.AUTH.errorCode);
-    }
-  };
-
-  const handleWechatMock = () => {
-    setShowWechatDialog(true);
-  };
-
-  const confirmWechatMock = async () => {
-    setShowWechatDialog(false);
-    setLoading(true);
-    const result = await wechatLogin();
-    setLoading(false);
     if (result.success) onLoginSuccess();
+    else setError(result.error || '登录失败，请检查输入。');
   };
 
   return (
-    <div className="login-page">
-      <div className="login-brand">
-        <div className="login-brand-mark">
-          <BrandMark size={72} />
-        </div>
-        <h1 className="login-title">{BRAND.APP_NAME}</h1>
-        <p className="login-subtitle">{BRAND.TAGLINE}</p>
-      </div>
+    <main className="login-page">
+      <section className="login-shell">
+        <header className="login-brand">
+          <div className="login-brand-mark"><E23Icon name="route" size={38} /></div>
+          <p className="login-eyebrow">48城 · 21,423公里 · 从深圳出发</p>
+          <h1 className="login-title">{BRAND.APP_NAME}</h1>
+          <p className="login-subtitle">每一步，都在环游中国</p>
+        </header>
 
-      <div className="login-form">
-        <div className="login-field">
-          <label className="login-label">{BRAND.AUTH.phoneLabel}</label>
-          <input
-            className="login-input"
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder={BRAND.AUTH.phonePlaceholder}
-            maxLength={11}
-          />
-        </div>
+        <TestModeNotice />
 
-        <div className="login-field">
-          <label className="login-label">{BRAND.AUTH.codeLabel}</label>
-          <div className="login-code-row">
-            <input
-              className="login-input code-input"
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder={BRAND.AUTH.codePlaceholder}
-              maxLength={6}
-            />
-            <button
-              className={`login-code-btn ${countdown > 0 ? 'disabled' : 'active'}`}
-              onClick={handleSendCode}
-              disabled={countdown > 0}
-            >
-              {countdown > 0 ? `${BRAND.AUTH.resendCode}（${countdown}s）` : BRAND.AUTH.getCodeBtn}
-            </button>
+        <section className="login-form" aria-label="手机号测试登录">
+          <div className="login-field">
+            <label className="login-label" htmlFor="login-phone">手机号码</label>
+            <input id="login-phone" className="login-input" type="tel" inputMode="numeric"
+              value={phone} onChange={(event) => setPhone(event.target.value.replace(/\D/g, ''))}
+              placeholder="请输入11位手机号码" maxLength={11} autoComplete="tel" />
           </div>
-          {codeMsg && <div className="login-hint success">{codeMsg}</div>}
-        </div>
+          <div className="login-field">
+            <label className="login-label" htmlFor="login-code">测试验证码</label>
+            <div className="login-code-row">
+              <input id="login-code" className="login-input code-input" type="text" inputMode="numeric"
+                value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))}
+                placeholder="请输入123456" maxLength={6} autoComplete="one-time-code" />
+              <button className="login-code-btn" onClick={handleRequestCode} disabled={testCode.countdown > 0}>
+                {testCode.countdown > 0 ? `${testCode.countdown}s后重试` : '生成验证码'}
+              </button>
+            </div>
+            {testCode.message && (
+              <div className="login-hint success">
+                <span>{testCode.message}</span>
+                <button type="button" onClick={testCode.fillCode}>一键填入</button>
+              </div>
+            )}
+          </div>
 
-        {error && <div className="login-error">{error}</div>}
-
-        <button className="login-btn" onClick={handleLogin} disabled={loading}>
-          {loading ? BRAND.AUTH.loginProcessing : BRAND.AUTH.loginBtn}
-        </button>
-
-        <div className="login-register-row">
-          <span className="login-register-text">还没有账号？</span>
-          <button className="login-register-link" onClick={onGoToRegister}>立即注册</button>
-        </div>
-
-        <div className="login-divider"><span>或</span></div>
-
-        <button className="login-wechat-btn" onClick={handleWechatMock} disabled={loading}>
-          🟢 {BRAND.AUTH.wechatBtn}
-        </button>
-
-        <div className="login-footer">
-          <span className="login-footer-link">《用户协议》</span>
-          <span className="login-footer-dot">·</span>
-          <span className="login-footer-link">《隐私政策》</span>
-        </div>
-        <div className="login-footer-test">
-          {BRAND.AUTH.footerVersion} · {BRAND.AUTH.footerTest}
-        </div>
-      </div>
+          <AuthAgreement checked={agreed} onChange={setAgreed} />
+          {error && <div className="login-error" role="alert">{error}</div>}
+          <button className="login-btn" onClick={handleLogin} disabled={loading}>
+            {loading ? '正在进入旅程…' : '进入我的中国旅程'}
+          </button>
+          <div className="login-register-row">
+            <span>第一次使用？</span><button onClick={onGoToRegister}>创建本地测试账号</button>
+          </div>
+          <div className="login-divider"><span>其他方式</span></div>
+          <button className="login-wechat-btn" onClick={() => setShowWechatDialog(true)}>
+            <E23Icon name="message" size={19} /> 微信登录（暂未接入）
+          </button>
+          <p className="login-footer-test">{BRAND.AUTH.footerVersion} · 数据主要保存在当前设备</p>
+        </section>
+      </section>
 
       {showWechatDialog && (
         <div className="login-dialog-overlay" onClick={() => setShowWechatDialog(false)}>
-          <div className="login-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="login-dialog-icon">⚠️</div>
-            <div className="login-dialog-title">{BRAND.AUTH.wechatDialogTitle}</div>
-            <div className="login-dialog-body">{BRAND.AUTH.wechatDialogBody}</div>
-            <div className="login-dialog-actions">
-              <button className="login-dialog-btn cancel" onClick={() => setShowWechatDialog(false)}>
-                {BRAND.AUTH.wechatCancel}
-              </button>
-              <button className="login-dialog-btn confirm" onClick={confirmWechatMock}>
-                {BRAND.AUTH.wechatConfirm}
-              </button>
-            </div>
+          <div className="login-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="login-dialog-icon"><E23Icon name="info" size={28} /></div>
+            <div className="login-dialog-title">微信登录暂未接入</div>
+            <div className="login-dialog-body">当前未配置微信开放平台，本测试版不会模拟授权成功，也不会生成假头像或微信资料。</div>
+            <button className="login-dialog-btn confirm" onClick={() => setShowWechatDialog(false)}>知道了</button>
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }

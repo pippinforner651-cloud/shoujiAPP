@@ -25,10 +25,11 @@ const tabs: { key: AppTab; label: string; icon: 'home' | 'run' | 'rank' | 'profi
 
 interface Props {
   onLogout: () => void;
+  initialTab?: 'home' | 'run';
 }
 
-export default function MainApp({ onLogout }: Props) {
-  const [activeTab, setActiveTab] = useState<AppTab>('home');
+export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
+  const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
 
   const stats = useRunStore((s) => s.stats);
   const records = useRunStore((s) => s.records);
