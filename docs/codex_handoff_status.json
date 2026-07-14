@@ -34,7 +34,7 @@
     "automated_tests": "32_passed_2026-07-14",
     "vite_build": "passed_2026-07-14; initial_main_js_309.03_kb_gzip_100.08_kb; echarts_map_chunks_still_over_500_kb",
     "android_build": "blocked: offline cache lacks com.android.tools.build:gradle:8.13.0 and com.google.gms:google-services:4.4.4; Android SDK is not configured",
-    "apk": "not_verified_in_current_baseline",
+    "apk": "github_actions_run_29326996985_success; artifact_8308365745; E23跑起来_V1.0.1_安卓测试版; 4371757_bytes; expires_2026-08-13",
     "icon_validation": "android_all_density_and_pwa_192_512_passed",
     "mobile_visual_acceptance": "passed_at_320_375_390_414; login_manual_run_summary_achievement_profile; zero_console_errors"
   },
