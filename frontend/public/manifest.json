@@ -1,11 +1,11 @@
 {
   "name": "E23跑起来",
   "short_name": "E23跑起来",
-  "description": "从戈壁出发，奔向世界 — 挑战、团队、坚持、超越、长期奔跑",
+  "description": "真实跑步，按1:10比例推进48城中国环线旅程。",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0D2B45",
-  "theme_color": "#0D2B45",
+  "background_color": "#18212B",
+  "theme_color": "#F28C22",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
