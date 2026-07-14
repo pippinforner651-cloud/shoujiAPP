@@ -1,298 +1,158 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import E23Icon from '../E23Icon';
 import RunTrackMap from '../RunTrackMap';
+import ManualRunEntry from './ManualRunEntry';
 import RunSummary from './RunSummary';
 import { checkGpsPermission, requestGpsPermission } from './gpsUtils';
-import {
-  RunSessionData,
-  createEmptySession, haversineKm, formatTime, formatPace, estimateCalories,
-} from './runState';
+import { createEmptySession, estimateCalories, formatPace, formatTime, haversineKm, type RunSessionData } from './runState';
+import { useCityStore } from '../../store/cityStore';
 import { useRunStore } from '../../store/runStore';
+import type { RunRecord } from '../../types/run';
+import { calculateRouteProgress } from '../../utils/routeProgress';
+import { buildRunSummary, type CompletedRunSummary, type ManualRunInput, type RouteSnapshot } from '../../utils/runFlow';
 
-export default function RunSession() {
+interface Props { onBackHome?: () => void; onViewMap?: () => void; }
+interface CompletedRun { record: RunRecord; summary: CompletedRunSummary; routeAfter: RouteSnapshot; }
+
+function routeSnapshot(actualKm: number): RouteSnapshot {
+  const progress = calculateRouteProgress(actualKm);
+  return {
+    currentCity: progress.currentCity ?? '深圳',
+    nextCity: progress.nextCity,
+    remainingToNextKm: progress.distanceToNextCityKm,
+    completionRate: progress.progressPercent,
+  };
+}
+
+function localToday() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export default function RunSession({ onBackHome = () => undefined, onViewMap = () => undefined }: Props) {
+  const [mode, setMode] = useState<'manual' | 'gps'>('manual');
   const [gpsGranted, setGpsGranted] = useState<boolean | null>(null);
   const [session, setSession] = useState<RunSessionData>(createEmptySession());
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'offline' | 'error'>('idle');
+  const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [completed, setCompleted] = useState<CompletedRun | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const addRecord = useRunStore((s) => s.addRecord);
-  const getUnsyncedRecords = useRunStore((s) => s.getUnsyncedRecords);
+  const startTimeRef = useRef(0);
+  const addRecord = useRunStore((state) => state.addRecord);
+  const checkAndUnlock = useCityStore((state) => state.checkAndUnlock);
 
-  // GPS 权限
   useEffect(() => {
-    checkGpsPermission().then((state) => {
-      if (state === 'granted') setGpsGranted(true);
-      else if (state === 'denied') setGpsGranted(false);
-      else setGpsGranted(null);
-    });
-  }, []);
-
-  const handleRequestGps = async () => {
-    const ok = await requestGpsPermission();
-    setGpsGranted(ok);
-  };
-
-  // GPS 采集
-  const startGps = useCallback(() => {
-    if (watchIdRef.current !== null) return;
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        setSession((prev) => {
-          const points = [...prev.points, {
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            timestamp: new Date(pos.timestamp).toISOString(),
-            speed: pos.coords.speed ?? undefined,
-            altitude: pos.coords.altitude ?? undefined,
-          }];
-          // 计算距离
-          let newDist = prev.distanceKm;
-          if (points.length >= 2) {
-            const last = points[points.length - 2];
-            newDist += haversineKm(last.latitude, last.longitude, pos.coords.latitude, pos.coords.longitude);
-          }
-          const distToUse = newDist;
-          const timeToUse = (Date.now() - startTimeRef.current) / 1000;
-          const pace = distToUse > 0.01 ? timeToUse / distToUse : 0;
-
-          return {
-            ...prev,
-            state: 'RUNNING',
-            points,
-            distanceKm: Math.round(distToUse * 1000) / 1000,
-            paceSec: Math.round(pace),
-          };
-        });
-      },
-      (err) => console.warn('GPS error:', err.message),
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
-    );
+    checkGpsPermission().then((state) => setGpsGranted(state === 'granted' ? true : state === 'denied' ? false : null));
   }, []);
 
   const stopGps = useCallback(() => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
+    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+    watchIdRef.current = null;
   }, []);
 
-  // 计时器
-  const startTimer = () => {
-    startTimeRef.current = Date.now();
-    timerRef.current = setInterval(() => {
-      setSession((prev) => {
-        if (prev.state !== 'RUNNING') return prev;
-        const elapsed = (Date.now() - startTimeRef.current) / 1000;
-        return {
-          ...prev,
-          durationSec: Math.round(elapsed),
-          calories: estimateCalories(prev.distanceKm),
-        };
-      });
-    }, 1000);
-  };
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+  }, []);
 
-  const stopTimer = () => {
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-  };
+  useEffect(() => () => { stopGps(); stopTimer(); }, [stopGps, stopTimer]);
 
-  // 开始跑步
-  const handleStart = () => {
-    setSession((prev) => ({
-      ...prev, state: 'RUNNING', distanceKm: 0, durationSec: 0, paceSec: 0, calories: 0, points: [],
-    }));
-    setSaveStatus('idle');
+  const persistRun = useCallback((input: ManualRunInput, gpsTrack: RunSessionData['points'] = []) => {
+    setSaving(true);
     setErrorMsg('');
-    startGps();
-    startTimer();
-  };
-
-  // 暂停
-  const handlePause = () => {
-    stopGps();
-    stopTimer();
-    setSession((prev) => ({ ...prev, state: 'PAUSED' }));
-  };
-
-  // 继续
-  const handleResume = () => {
-    startGps();
-    startTimer();
-    setSession((prev) => ({ ...prev, state: 'RUNNING' }));
-  };
-
-  // 保存到本地（含离线缓存）
-  const saveSession = useCallback(() => {
-    const s = session;
-    if (s.distanceKm <= 0) return;
-
-    setSaveStatus('saving');
-
     try {
-      // 计算爬升
-      let elevationGain = 0;
-      if (s.points.length >= 2) {
-        for (let i = 1; i < s.points.length; i++) {
-          const prevAlt = s.points[i - 1].altitude;
-          const curAlt = s.points[i].altitude;
-          if (prevAlt !== undefined && curAlt !== undefined && curAlt > prevAlt) {
-            elevationGain += (curAlt - prevAlt);
-          }
-        }
-      }
-
-      const record = addRecord(
-        new Date().toISOString().slice(0, 10),
-        s.distanceKm,
-        s.durationSec / 60,
-        `🏃 真实跑步 · ${s.points.length} 个GPS点`,
-        s.points,
-        {
-          durationSec: s.durationSec,
-          calories: s.calories,
-          elevationGain: Math.round(elevationGain),
-          source: 'app_gps',
-          verificationStatus: 'verified_device',
-          deviceName: navigator.platform || '本机',
-          synced: navigator.onLine !== false ? false : false, // 标记为等待同步
-        }
-      );
-
-      if (record) {
-        const isOnline = navigator.onLine !== false;
-        setSaveStatus(isOnline ? 'saved' : 'offline');
-        console.log(`[RunSession] ${isOnline ? '已保存' : '离线缓存'}: ${s.distanceKm.toFixed(2)} km`);
-      }
-    } catch (err) {
-      console.error('[RunSession] 保存失败:', err);
-      setSaveStatus('error');
-      setErrorMsg(String(err));
+      const beforeActualKm = useRunStore.getState().stats.totalDistanceKm;
+      const before = routeSnapshot(beforeActualKm);
+      const source = gpsTrack.length > 0 ? 'app_gps' : 'manual';
+      const record = addRecord(input.date, input.distanceKm, input.durationMin, input.note, gpsTrack, {
+        durationSec: Math.round(input.durationMin * 60),
+        calories: estimateCalories(input.distanceKm),
+        source,
+        sportType: input.sportType ?? 'running',
+        verificationStatus: source === 'app_gps' ? 'verified_device' : 'manual_unverified',
+        deviceName: source === 'app_gps' ? navigator.platform || '本机' : undefined,
+        synced: false,
+      });
+      const afterActualKm = beforeActualKm + record.distanceKm;
+      const after = routeSnapshot(afterActualKm);
+      checkAndUnlock(afterActualKm);
+      setCompleted({ record, summary: buildRunSummary(record, before, after), routeAfter: after });
+    } catch (error) {
+      setErrorMsg(`保存失败：${String(error)}`);
+    } finally {
+      setSaving(false);
     }
-  }, [session, addRecord]);
+  }, [addRecord, checkAndUnlock]);
 
-  // 结束
+  const startGps = useCallback(() => {
+    if (watchIdRef.current !== null || !navigator.geolocation) return;
+    watchIdRef.current = navigator.geolocation.watchPosition((position) => {
+      setSession((previous) => {
+        const points = [...previous.points, {
+          latitude: position.coords.latitude, longitude: position.coords.longitude,
+          timestamp: new Date(position.timestamp).toISOString(), speed: position.coords.speed ?? undefined,
+          altitude: position.coords.altitude ?? undefined,
+        }];
+        let distanceKm = previous.distanceKm;
+        if (points.length >= 2) {
+          const prior = points[points.length - 2];
+          distanceKm += haversineKm(prior.latitude, prior.longitude, position.coords.latitude, position.coords.longitude);
+        }
+        const durationSec = (Date.now() - startTimeRef.current) / 1000;
+        return { ...previous, state: 'RUNNING', points, distanceKm: Math.round(distanceKm * 1000) / 1000,
+          paceSec: distanceKm > .01 ? Math.round(durationSec / distanceKm) : 0 };
+      });
+    }, (error) => setErrorMsg(`GPS定位暂不可用：${error.message}`), { enableHighAccuracy: true, maximumAge: 1000, timeout: 8000 });
+  }, []);
+
+  const startTimer = (elapsedSeconds = 0) => {
+    startTimeRef.current = Date.now() - elapsedSeconds * 1000;
+    timerRef.current = setInterval(() => setSession((previous) => previous.state === 'RUNNING'
+      ? { ...previous, durationSec: Math.round((Date.now() - startTimeRef.current) / 1000), calories: estimateCalories(previous.distanceKm) }
+      : previous), 1000);
+  };
+
+  const handleStart = () => {
+    setSession({ ...createEmptySession(), state: 'RUNNING' });
+    setErrorMsg('');
+    startTimer(0);
+    startGps();
+  };
+  const handlePause = () => { stopGps(); stopTimer(); setSession((previous) => ({ ...previous, state: 'PAUSED' })); };
+  const handleResume = () => { startTimer(session.durationSec); startGps(); setSession((previous) => ({ ...previous, state: 'RUNNING' })); };
   const handleFinish = () => {
-    stopGps();
-    stopTimer();
-    saveSession();
-    setSession((prev) => ({ ...prev, state: 'FINISHED' }));
+    stopGps(); stopTimer();
+    if (session.distanceKm < .1 || session.durationSec < 60) return setErrorMsg('GPS记录至少需要0.1公里和1分钟才能保存。');
+    setSession((previous) => ({ ...previous, state: 'FINISHED' }));
+    persistRun({ distanceKm: session.distanceKm, durationMin: session.durationSec / 60, date: localToday(), sportType: 'running', note: '本机GPS记录' }, session.points);
   };
+  const reset = () => { setCompleted(null); setSession(createEmptySession()); setErrorMsg(''); };
 
-  // 重试保存
-  const handleRetry = () => {
-    setSaveStatus('idle');
-    setErrorMsg('');
-    setTimeout(() => saveSession(), 300);
-  };
-
-  // 重制
-  const handleReset = () => {
-    setSession(createEmptySession());
-    setSaveStatus('idle');
-    setErrorMsg('');
-  };
-
-  // 联网自动重试（未同步记录）
-  useEffect(() => {
-    const onOnline = () => {
-      const unsynced = getUnsyncedRecords().length;
-      if (unsynced > 0) {
-        console.log(`[RunSession] 网络恢复，待同步: ${unsynced} 条`);
-      }
-    };
-    window.addEventListener('online', onOnline);
-    return () => window.removeEventListener('online', onOnline);
-  }, [getUnsyncedRecords]);
-
-  // 配速显示
-  const paceDisplay = formatPace(session.paceSec);
-
-  // GPS 授权提示
-  if (gpsGranted === null) {
-    return (
-      <div className="run-session-gps">
-        <div className="rs-gps-icon">📍</div>
-        <div className="rs-gps-title">允许访问位置信息</div>
-        <div className="rs-gps-desc">跑步功能需要使用 GPS 定位来记录你的运动轨迹</div>
-        <button className="rs-gps-btn" onClick={handleRequestGps}>允许定位</button>
-      </div>
-    );
-  }
-
-  if (gpsGranted === false) {
-    return (
-      <div className="run-session-gps">
-        <div className="rs-gps-icon">🚫</div>
-        <div className="rs-gps-title">GPS 权限被拒绝</div>
-        <div className="rs-gps-desc">请在系统设置中允许访问位置信息</div>
-        <button className="rs-gps-btn" onClick={handleRequestGps}>重新请求</button>
-      </div>
-    );
-  }
+  if (completed) return <RunSummary {...completed} onReset={reset} onBackHome={onBackHome} onViewMap={onViewMap} />;
 
   const isIdle = session.state === 'IDLE';
   const isRunning = session.state === 'RUNNING';
   const isPaused = session.state === 'PAUSED';
-  const isFinished = session.state === 'FINISHED';
 
   return (
-    <div className="run-session">
-      {isFinished ? (
-        <RunSummary session={session} onReset={handleReset} />
-      ) : (<>
-      {/* 实时数据 */}
-      <div className="rs-display">
-        <div className="rs-main">{isIdle ? '准备' : formatTime(session.durationSec)}</div>
-        <div className="rs-sub">{isIdle ? '开始跑步' : isPaused ? '已暂停' : '跑步中'}</div>
-      </div>
+    <div className="run-session-v1">
+      <header className="run-mode-header"><div><p className="section-kicker">记录一次真实运动</p><h1>跑完以后，旅程继续</h1></div>
+        <div className="run-mode-switch"><button className={mode === 'manual' ? 'active' : ''} onClick={() => setMode('manual')}>手动录入</button><button className={mode === 'gps' ? 'active' : ''} onClick={() => setMode('gps')}>GPS记录</button></div>
+      </header>
 
-      <div className="rs-stats">
-        <div className="rs-stat">
-          <div className="rs-stat-val">{session.distanceKm.toFixed(2)}</div>
-          <div className="rs-stat-label">距离 (km)</div>
-        </div>
-        <div className="rs-stat">
-          <div className="rs-stat-val">{paceDisplay}</div>
-          <div className="rs-stat-label">配速</div>
-        </div>
-        <div className="rs-stat">
-          <div className="rs-stat-val">{session.calories}</div>
-          <div className="rs-stat-label">千卡</div>
-        </div>
-      </div>
-
-      {/* 轨迹地图 */}
-      {(isRunning || isPaused) && session.points.length >= 2 && (
-        <div className="rs-track">
-          <RunTrackMap gpsTrack={session.points} height="180px" />
-          <div className="rs-track-info">{session.points.length} 个轨迹点</div>
-        </div>
+      {mode === 'manual' ? <ManualRunEntry onSave={(input) => persistRun(input)} saving={saving} /> : (
+        <section className="gps-run-card">
+          {gpsGranted !== true ? <div className="gps-permission-card"><div className="gps-permission-icon"><E23Icon name="route" size={30} /></div><h2>{gpsGranted === false ? '定位权限尚未开启' : '使用GPS记录真实轨迹'}</h2><p>授权后会在本机记录距离、时长和轨迹。GPS能力仍需真机验证。</p><button className="primary-action" onClick={async () => setGpsGranted(await requestGpsPermission())}>{gpsGranted === false ? '重新请求定位' : '允许定位并继续'}</button></div> : <>
+            <div className="gps-live-display"><span>{isIdle ? '准备出发' : isPaused ? '已暂停' : '记录中'}</span><strong>{formatTime(session.durationSec)}</strong><p>{session.distanceKm.toFixed(2)} km · {formatPace(session.paceSec)}</p></div>
+            <div className="gps-live-grid"><div><span>距离</span><strong>{session.distanceKm.toFixed(2)} km</strong></div><div><span>配速</span><strong>{formatPace(session.paceSec)}</strong></div><div><span>轨迹点</span><strong>{session.points.length}</strong></div></div>
+            {(isRunning || isPaused) && session.points.length >= 2 && <div className="gps-track-card"><RunTrackMap gpsTrack={session.points} height="180px" /></div>}
+            {errorMsg && <div className="run-form-error" role="alert">{errorMsg}</div>}
+            <div className="gps-actions">{isIdle && <button className="primary-action" onClick={handleStart}><E23Icon name="run" size={20} />开始GPS记录</button>}{isRunning && <button className="secondary-action" onClick={handlePause}>暂停记录</button>}{isPaused && <><button className="secondary-action" onClick={handleResume}>继续记录</button><button className="primary-action" onClick={handleFinish} disabled={saving}>结束并保存</button></>}</div>
+          </>}
+        </section>
       )}
-
-      {/* 保存状态提示 */}
-      {saveStatus === 'offline' && (
-        <div className="rs-save-status offline">📦 已离线缓存，联网后自动上传</div>
-      )}
-      {saveStatus === 'error' && (
-        <div className="rs-save-status error">
-          ❌ 保存失败: {errorMsg}
-          <button className="rs-retry-btn" onClick={handleRetry}>重试</button>
-        </div>
-      )}
-
-      {/* 操作按钮 */}
-      <div className="rs-actions">
-        {isIdle && <button className="rs-btn start" onClick={handleStart}>▶ 开始跑步</button>}
-        {isRunning && <button className="rs-btn pause" onClick={handlePause}>⏸ 暂停</button>}
-        {isPaused && (
-          <>
-            <button className="rs-btn resume" onClick={handleResume}>▶ 继续</button>
-            <button className="rs-btn finish" onClick={handleFinish}>⏹ 结束</button>
-          </>
-        )}
-      </div>
-      </>)}
+      {mode === 'manual' && errorMsg && <div className="run-form-error">{errorMsg}</div>}
     </div>
   );
 }

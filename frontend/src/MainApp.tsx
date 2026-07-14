@@ -123,7 +123,7 @@ export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
           </div>
         )}
 
-        {activeTab === 'run' && <div className="tab-page"><RunSession /></div>}
+        {activeTab === 'run' && <div className="tab-page"><RunSession onBackHome={() => setActiveTab('home')} onViewMap={() => setActiveTab('home')} /></div>}
         {activeTab === 'rank' && <div className="tab-page tab-scroll"><div className="rank-header"><h2 className="rank-header-title">{BRAND.RANKING.title}</h2><p className="rank-header-desc">{BRAND.RANKING.description}</p></div><GlobalProgressCard /><GlobalRanking /><FriendsList /></div>}
         {activeTab === 'profile' && <div className="tab-page tab-scroll"><MyProfile onLogout={onLogout} /></div>}
       </main>
