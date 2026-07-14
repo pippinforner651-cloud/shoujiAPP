@@ -10,9 +10,8 @@ import E23Icon from './components/E23Icon';
 import { useRunStore } from './store/runStore';
 import { useCityStore } from './store/cityStore';
 
-import { subscribeProgress } from './store/progressStore';
+import { subscribeProgress, useProgressStore } from './store/progressStore';
 import { BRAND, getGreeting } from './config/brand';
-import { getRouteData } from './data/routeLoader';
 import './App.css';
 
 type AppTab = 'home' | 'run' | 'rank' | 'profile';
@@ -35,43 +34,30 @@ export default function MainApp({ onLogout }: Props) {
   const records = useRunStore((s) => s.records);
   const { initialize: initRun } = useRunStore();
   const { initialize: initCity, checkAndUnlock } = useCityStore();
+  const progress = useProgressStore((s) => s.info);
+  const initProgress = useProgressStore((s) => s.initialize);
 
   useEffect(() => {
     initRun();
     initCity();
+    initProgress();
     subscribeProgress();
-  }, [initRun, initCity]);
+  }, [initRun, initCity, initProgress]);
 
   useEffect(() => {
     if (stats.totalDistanceKm > 0) checkAndUnlock(stats.totalDistanceKm);
   }, [stats.totalDistanceKm, checkAndUnlock]);
 
-  // 首页核心数据
-  const virtualKm = Math.round(stats.totalDistanceKm * 10 * 100) / 100;
+  // 首页核心数据全部读取同一个路线进度来源。
+  const virtualKm = progress.virtualKm;
   const todayKm = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     return records.filter((r) => r.date === today).reduce((s, r) => s + r.distanceKm, 0);
   }, [records]);
 
-  // 路线定位
-  const { nodes } = getRouteData();
-  const currentCity = useMemo(() => {
-    if (!nodes.length) return '深圳';
-    for (let i = nodes.length - 1; i >= 0; i--) {
-      if (virtualKm >= nodes[i].totalDistanceKm) return nodes[i].city;
-    }
-    return nodes[0]?.city || '深圳';
-  }, [virtualKm, nodes]);
-
-  const nextCity = useMemo(() => {
-    const idx = nodes.findIndex((n) => n.totalDistanceKm > virtualKm);
-    return idx >= 0 ? nodes[idx].city : '🏁 完成全旅程';
-  }, [virtualKm, nodes]);
-
-  const remainingKm = useMemo(() => {
-    const idx = nodes.findIndex((n) => n.totalDistanceKm > virtualKm);
-    return idx >= 0 ? Math.round(nodes[idx].totalDistanceKm - virtualKm) : 0;
-  }, [virtualKm, nodes]);
+  const currentCity = progress.currentCity?.city ?? '深圳';
+  const nextCity = progress.headingToCity;
+  const remainingKm = progress.remainingToNextKm;
 
   const lastRun = useMemo(() => {
     if (!records.length) return null;
@@ -133,7 +119,7 @@ export default function MainApp({ onLogout }: Props) {
                 <span className="home-progress-city next">{nextCity}</span>
               </div>
               <div className="home-progress-bar">
-                <div className="home-progress-fill" style={{ width: `${Math.min(100, (virtualKm / (nodes[nodes.length - 1]?.totalDistanceKm || 21423)) * 100)}%` }} />
+                <div className="home-progress-fill" style={{ width: `${progress.completionRate}%` }} />
               </div>
               <span className="home-progress-remaining">距下一站还有 {remainingKm.toLocaleString()} 虚拟公里</span>
             </div>

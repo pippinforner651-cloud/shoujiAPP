@@ -10,7 +10,7 @@
 
 import { create } from 'zustand';
 import { getRouteData } from '../data/routeLoader';
-import { SCALE_RATIO } from '../types/progress';
+import { calculateRouteProgress } from '../utils/routeProgress';
 import type { CityUnlock, CityStorage } from '../types/city';
 import { CITY_STORAGE_KEY, CITY_STORAGE_VERSION } from '../types/city';
 
@@ -45,7 +45,7 @@ function saveCities(cities: CityUnlock[]): void {
  * 检测是否有新城市到达
  * 规则：返回所有 totalDistanceKm ≤ virtualKm 且尚未解锁的城市
  */
-function detectNewCities(virtualKm: number, alreadyUnlocked: Set<string>): CityUnlock[] {
+function detectNewCities(unlockedIds: Set<string>, alreadyUnlocked: Set<string>): CityUnlock[] {
   const { nodes } = getRouteData();
   const results: CityUnlock[] = [];
 
@@ -69,7 +69,7 @@ function detectNewCities(virtualKm: number, alreadyUnlocked: Set<string>): CityU
     }
 
     // 到达该城市的累计虚拟公里
-    if (virtualKm >= node.totalDistanceKm) {
+    if (unlockedIds.has(node.id)) {
       results.push({
         city: node.city,
         province: node.province,
@@ -141,9 +141,9 @@ export const useCityStore = create<CityState>((set, get) => ({
   },
 
   checkAndUnlock: (realKm: number) => {
-    const virtualKm = realKm * SCALE_RATIO;
+    const unlockedIds = new Set(calculateRouteProgress(realKm).unlockedCityIds);
     const unlockedMap = new Set(get().unlockedCities.map((c) => c.city));
-    const newCities = detectNewCities(virtualKm, unlockedMap);
+    const newCities = detectNewCities(unlockedIds, unlockedMap);
 
     if (newCities.length === 0) return [];
 

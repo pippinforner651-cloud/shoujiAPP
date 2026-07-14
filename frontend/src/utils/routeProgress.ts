@@ -6,6 +6,10 @@
  */
 import { getRouteData } from '../data/routeLoader';
 import { getGeometryData } from '../data/routeGeometryLoader';
+import {
+  calculateRouteProgress as calculateRouteProgressCore,
+  type RouteProgressResult,
+} from './routeProgressCore';
 
 export interface RouteSplit {
   /** 已完成路线坐标序列（含跑者位置） */
@@ -21,12 +25,47 @@ export interface RouteSplit {
 }
 
 /**
+ * 唯一的路线进度入口：真实跑量统一按冻结的 1:10 比例换算，
+ * 并把广州→深圳的 140km 闭环作为正式最后一段。
+ */
+export function calculateRouteProgress(actualDistanceKm: number): RouteProgressResult {
+  const { meta, nodes, closure } = getRouteData();
+  return calculateRouteProgressCore(actualDistanceKm, {
+    meta: {
+      total_distance_km: meta.totalDistanceKm,
+      scale_ratio: meta.scaleRatio,
+      start_city: meta.startCity,
+      end_city: meta.endCity,
+    },
+    nodes: nodes.map((node) => ({
+      id: node.id,
+      city: node.city,
+      total_distance_km: node.totalDistanceKm,
+    })),
+    closure: {
+      from_city: closure.from,
+      to_city: closure.to,
+      distance_km: closure.distanceKm,
+      total_distance_km: closure.totalDistanceKm,
+    },
+  });
+}
+
+/** 地图与图表已经持有虚拟里程时使用，仍回到同一计算核心。 */
+export function calculateRouteProgressFromVirtual(virtualDistanceKm: number): RouteProgressResult {
+  const { meta } = getRouteData();
+  return calculateRouteProgress(virtualDistanceKm / meta.scaleRatio);
+}
+
+/**
  * 根据虚拟公里分割路线（基于真实道路几何）
  */
 export function splitRouteByProgress(virtualKm: number): RouteSplit {
   const { nodes, meta } = getRouteData();
   const geo = getGeometryData();
   const totalVirtual = meta.totalDistanceKm;
+  const progress = calculateRouteProgressFromVirtual(virtualKm);
+  const clampedVirtualKm = progress.clampedVirtualDistanceKm;
 
   const defaultRes: RouteSplit = {
     completedCoords: [],
@@ -41,13 +80,13 @@ export function splitRouteByProgress(virtualKm: number): RouteSplit {
   // 找到跑者所在的城市索引
   let currentIndex = 0;
   for (let i = nodes.length - 1; i >= 0; i--) {
-    if (nodes[i].totalDistanceKm <= virtualKm) {
+    if (nodes[i].totalDistanceKm <= clampedVirtualKm) {
       currentIndex = i;
       break;
     }
   }
   const isAtCity = currentIndex < nodes.length &&
-    Math.abs((nodes[currentIndex]?.totalDistanceKm ?? 0) - virtualKm) < 1;
+    Math.abs((nodes[currentIndex]?.totalDistanceKm ?? 0) - clampedVirtualKm) < 1;
 
   // ===== 构建已完成路线坐标 =====
   const completedCoords: [number, number][] = [];
@@ -64,13 +103,13 @@ export function splitRouteByProgress(virtualKm: number): RouteSplit {
   }
 
   // 当前段（如果未抵达城市，取部分）
-  if (currentIndex < geo.segments.length && !isAtCity && virtualKm > 0 && virtualKm < totalVirtual) {
+  if (currentIndex < geo.segments.length && !isAtCity && clampedVirtualKm > 0 && clampedVirtualKm < totalVirtual) {
     const seg = geo.segments[currentIndex];
     const coords = seg.geometry.coordinates as [number, number][];
     const fromNode = nodes[currentIndex];
-    const toNode = nodes[Math.min(currentIndex + 1, nodes.length - 1)];
-    const segDist = toNode.totalDistanceKm - fromNode.totalDistanceKm;
-    const ratio = segDist > 0 ? (virtualKm - fromNode.totalDistanceKm) / segDist : 0;
+    const segmentEndKm = progress.isOnClosureSegment ? totalVirtual : nodes[Math.min(currentIndex + 1, nodes.length - 1)].totalDistanceKm;
+    const segDist = segmentEndKm - fromNode.totalDistanceKm;
+    const ratio = segDist > 0 ? (clampedVirtualKm - fromNode.totalDistanceKm) / segDist : 0;
 
     // 取一部分坐标
     const totalPoints = coords.length;
@@ -87,10 +126,10 @@ export function splitRouteByProgress(virtualKm: number): RouteSplit {
   // ===== 构建未完成路线坐标 =====
   const uncompletedCoords: [number, number][] = [];
 
-  if (virtualKm <= 0) {
+  if (clampedVirtualKm <= 0) {
     // 未起步：全部未完成
     uncompletedCoords.push(...geo.allCoords);
-  } else if (virtualKm < totalVirtual) {
+  } else if (clampedVirtualKm < totalVirtual) {
     // 从当前段的剩余部分开始
     if (currentIndex < geo.segments.length) {
       const seg = geo.segments[currentIndex];
@@ -99,9 +138,9 @@ export function splitRouteByProgress(virtualKm: number): RouteSplit {
       if (!isAtCity) {
         // 取当前段的后半部分
         const fromNode = nodes[currentIndex];
-        const toNode = nodes[Math.min(currentIndex + 1, nodes.length - 1)];
-        const segDist = toNode.totalDistanceKm - fromNode.totalDistanceKm;
-        const ratio = segDist > 0 ? (virtualKm - fromNode.totalDistanceKm) / segDist : 0;
+        const segmentEndKm = progress.isOnClosureSegment ? totalVirtual : nodes[Math.min(currentIndex + 1, nodes.length - 1)].totalDistanceKm;
+        const segDist = segmentEndKm - fromNode.totalDistanceKm;
+        const ratio = segDist > 0 ? (clampedVirtualKm - fromNode.totalDistanceKm) / segDist : 0;
         const totalPoints = segCoords.length;
         const startPoint = Math.min(Math.floor(ratio * totalPoints), totalPoints - 1);
         uncompletedCoords.push(...segCoords.slice(startPoint));
@@ -125,9 +164,9 @@ export function splitRouteByProgress(virtualKm: number): RouteSplit {
 
   // ===== 计算跑者位置 =====
   let runnerCoord: [number, number];
-  if (virtualKm <= 0) {
+  if (clampedVirtualKm <= 0) {
     runnerCoord = [nodes[0].longitude, nodes[0].latitude];
-  } else if (virtualKm >= totalVirtual) {
+  } else if (clampedVirtualKm >= totalVirtual) {
     const last = geo.allCoords[geo.allCoords.length - 1];
     runnerCoord = last || [nodes[nodes.length - 1].longitude, nodes[nodes.length - 1].latitude];
   } else if (isAtCity) {
@@ -143,9 +182,9 @@ export function splitRouteByProgress(virtualKm: number): RouteSplit {
       const seg = geo.segments[currentIndex];
       const segCoords = seg.geometry.coordinates as [number, number][];
       const fromNode = nodes[currentIndex];
-      const toNode = nodes[Math.min(currentIndex + 1, nodes.length - 1)];
-      const segDist = toNode.totalDistanceKm - fromNode.totalDistanceKm;
-      const ratio = segDist > 0 ? (virtualKm - fromNode.totalDistanceKm) / segDist : 0;
+      const segmentEndKm = progress.isOnClosureSegment ? totalVirtual : nodes[Math.min(currentIndex + 1, nodes.length - 1)].totalDistanceKm;
+      const segDist = segmentEndKm - fromNode.totalDistanceKm;
+      const ratio = segDist > 0 ? (clampedVirtualKm - fromNode.totalDistanceKm) / segDist : 0;
       const pt = Math.min(Math.floor(ratio * segCoords.length), segCoords.length - 1);
       runnerCoord = segCoords[pt];
     }
