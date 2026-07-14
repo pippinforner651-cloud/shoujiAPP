@@ -1,20 +1,28 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import ChinaMap from './components/ChinaMap';
 import CityBottomSheet from './components/CityBottomSheet';
 import GlobalProgressCard from './components/GlobalProgressCard';
 import GlobalRanking from './components/GlobalRanking';
-import PersonalShareCard from './components/ShareCard/PersonalShareCard';
 import FriendsList from './components/FriendsList';
 import RunSession from './components/RunSession';
 import MyProfile from './components/MyProfile';
+import E23Icon from './components/E23Icon';
 import { useRunStore } from './store/runStore';
 import { useCityStore } from './store/cityStore';
-import { useGlobalStore } from './store/globalProgressStore';
+
 import { subscribeProgress } from './store/progressStore';
-import type { MapMode } from './components/ChinaMap/types';
+import { BRAND, getGreeting } from './config/brand';
+import { getRouteData } from './data/routeLoader';
 import './App.css';
 
 type AppTab = 'home' | 'run' | 'rank' | 'profile';
+
+const tabs: { key: AppTab; label: string; icon: 'home' | 'run' | 'rank' | 'profile' }[] = [
+  { key: 'home', label: '首页', icon: 'home' },
+  { key: 'run', label: '跑步', icon: 'run' },
+  { key: 'rank', label: '排行', icon: 'rank' },
+  { key: 'profile', label: '我的', icon: 'profile' },
+];
 
 interface Props {
   onLogout: () => void;
@@ -22,66 +30,142 @@ interface Props {
 
 export default function MainApp({ onLogout }: Props) {
   const [activeTab, setActiveTab] = useState<AppTab>('home');
-  const [mapMode, setMapMode] = useState<MapMode>('personal');
 
-  const totalDistanceKm = useRunStore((s) => s.stats.totalDistanceKm);
-  const globalProgress = useGlobalStore((s) => s.progress);
+  const stats = useRunStore((s) => s.stats);
+  const records = useRunStore((s) => s.records);
   const { initialize: initRun } = useRunStore();
   const { initialize: initCity, checkAndUnlock } = useCityStore();
-  const { initialize: initGlobal } = useGlobalStore();
 
   useEffect(() => {
     initRun();
     initCity();
-    initGlobal();
     subscribeProgress();
-  }, [initRun, initCity, initGlobal]);
+  }, [initRun, initCity]);
 
-  // 跑步后自动检测城市解锁
   useEffect(() => {
-    if (totalDistanceKm > 0) checkAndUnlock(totalDistanceKm);
-  }, [totalDistanceKm, checkAndUnlock]);
+    if (stats.totalDistanceKm > 0) checkAndUnlock(stats.totalDistanceKm);
+  }, [stats.totalDistanceKm, checkAndUnlock]);
 
-  const tabs: { key: AppTab; label: string; icon: string }[] = [
-    { key: 'home', label: '首页', icon: '🏠' },
-    { key: 'run', label: '跑步', icon: '🏃' },
-    { key: 'rank', label: '排行榜', icon: '🏆' },
-    { key: 'profile', label: '我的', icon: '👤' },
-  ];
+  // 首页核心数据
+  const virtualKm = Math.round(stats.totalDistanceKm * 10 * 100) / 100;
+  const todayKm = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return records.filter((r) => r.date === today).reduce((s, r) => s + r.distanceKm, 0);
+  }, [records]);
+
+  // 路线定位
+  const { nodes } = getRouteData();
+  const currentCity = useMemo(() => {
+    if (!nodes.length) return '深圳';
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      if (virtualKm >= nodes[i].totalDistanceKm) return nodes[i].city;
+    }
+    return nodes[0]?.city || '深圳';
+  }, [virtualKm, nodes]);
+
+  const nextCity = useMemo(() => {
+    const idx = nodes.findIndex((n) => n.totalDistanceKm > virtualKm);
+    return idx >= 0 ? nodes[idx].city : '🏁 完成全旅程';
+  }, [virtualKm, nodes]);
+
+  const remainingKm = useMemo(() => {
+    const idx = nodes.findIndex((n) => n.totalDistanceKm > virtualKm);
+    return idx >= 0 ? Math.round(nodes[idx].totalDistanceKm - virtualKm) : 0;
+  }, [virtualKm, nodes]);
+
+  const lastRun = useMemo(() => {
+    if (!records.length) return null;
+    return records[records.length - 1];
+  }, [records]);
+
+  const streakDays = useMemo(() => {
+    if (!records.length) return 0;
+    let streak = 0;
+    const d = new Date();
+    while (true) {
+      const ds = d.toISOString().slice(0, 10);
+      if (records.some((r) => r.date === ds)) { streak++; d.setDate(d.getDate() - 1); }
+      else break;
+    }
+    return streak;
+  }, [records]);
 
   return (
     <div className="app app-mobile">
       <main className="app-main-mobile">
         {activeTab === 'home' && (
-          <div className="tab-page">
-            <div className="mode-toggle">
-              <button className={`mode-btn ${mapMode === 'personal' ? 'active' : ''}`}
-                onClick={() => setMapMode('personal')}>🏃 我的旅程</button>
-              <button className={`mode-btn ${mapMode === 'global' ? 'active' : ''}`}
-                onClick={() => setMapMode('global')}>🌍 全民旅程</button>
+          <div className="tab-page tab-scroll">
+            {/* 问候区 */}
+            <div className="home-greeting">
+              <span>{getGreeting()}</span>
+              <span className="home-greeting-city">📍 {currentCity}</span>
             </div>
-            <div className="home-stats">
-              <div className="home-stat">
-                <span className="home-stat-val">{totalDistanceKm.toFixed(0)}</span>
-                <span className="home-stat-label">我的跑量 (km)</span>
+
+            {/* 核心数据区 */}
+            <div className="home-dashboard">
+              <div className="home-dash-card accent">
+                <span className="home-dash-val">{todayKm.toFixed(1)}</span>
+                <span className="home-dash-label">今日跑量 (km)</span>
               </div>
-              <div className="home-stat">
-                <span className="home-stat-val accent">{globalProgress.participantCount}</span>
-                <span className="home-stat-label">参与人数</span>
+              <div className="home-dash-card">
+                <span className="home-dash-val">{stats.totalDistanceKm.toFixed(0)}</span>
+                <span className="home-dash-label">累计 (km)</span>
               </div>
-              <div className="home-stat">
-                <span className="home-stat-val">{globalProgress.totalRealKm > 0 ? (globalProgress.totalRealKm / 1000).toFixed(1) + 'k' : '--'}</span>
-                <span className="home-stat-label">全民跑量 (km)</span>
+              <div className="home-dash-card">
+                <span className="home-dash-val">{virtualKm.toLocaleString()}</span>
+                <span className="home-dash-label">虚拟里程 (km)</span>
+              </div>
+              <div className="home-dash-card">
+                <span className="home-dash-val">{streakDays}</span>
+                <span className="home-dash-label">连续天数</span>
               </div>
             </div>
-            <div className="map-container-mobile">
-              {mapMode === 'personal' ? (
-                <ChinaMap mode="personal" height="320px" />
-              ) : (
-                <ChinaMap mode="global" height="320px" />
-              )}
+
+            {/* 进度卡 */}
+            <div className="home-progress-card">
+              <div className="home-progress-header">
+                <span className="home-progress-title">E23当前到达</span>
+                <span className="home-progress-map-btn" onClick={() => setActiveTab('home')}>查看地图 ›</span>
+              </div>
+              <div className="home-progress-cities">
+                <span className="home-progress-city current">{currentCity}</span>
+                <span className="home-progress-arrow">→</span>
+                <span className="home-progress-city next">{nextCity}</span>
+              </div>
+              <div className="home-progress-bar">
+                <div className="home-progress-fill" style={{ width: `${Math.min(100, (virtualKm / (nodes[nodes.length - 1]?.totalDistanceKm || 21423)) * 100)}%` }} />
+              </div>
+              <span className="home-progress-remaining">距下一站还有 {remainingKm.toLocaleString()} 虚拟公里</span>
             </div>
-            <div className="home-actions"><PersonalShareCard /></div>
+
+            {/* 地图缩略 */}
+            <div className="home-map-mini">
+              <ChinaMap mode="personal" height="200px" />
+            </div>
+
+            {/* 最近跑步 */}
+            {lastRun ? (
+              <div className="home-last-run">
+                <span className="home-last-run-title">最近运动</span>
+                <div className="home-last-run-card">
+                  <span className="home-last-run-date">{lastRun.date}</span>
+                  <span className="home-last-run-dist">{lastRun.distanceKm.toFixed(2)} km</span>
+                  <span className="home-last-run-dur">{Math.round(lastRun.durationMin)} 分钟</span>
+                </div>
+              </div>
+            ) : (
+              <div className="home-empty-state">
+                <E23Icon name="runner" size={48} color="#667" />
+                <p className="home-empty-text">还没有跑步记录</p>
+                <p className="home-empty-hint">完成一次跑步，成为首位出发的E23跑者</p>
+              </div>
+            )}
+
+            {/* CTA */}
+            <button className="home-start-btn" onClick={() => setActiveTab('run')}>
+              <E23Icon name="run" size={20} color="#fff" />
+              <span>{BRAND.HOME.startRun}</span>
+            </button>
           </div>
         )}
 
@@ -91,6 +175,10 @@ export default function MainApp({ onLogout }: Props) {
 
         {activeTab === 'rank' && (
           <div className="tab-page tab-scroll">
+            <div className="rank-header">
+              <h2 className="rank-header-title">{BRAND.RANKING.title}</h2>
+              <p className="rank-header-desc">{BRAND.RANKING.description}</p>
+            </div>
             <GlobalProgressCard />
             <GlobalRanking />
             <FriendsList />
@@ -111,7 +199,7 @@ export default function MainApp({ onLogout }: Props) {
             className={`tab-btn ${activeTab === tab.key ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.key)}
           >
-            <span className="tab-icon">{tab.icon}</span>
+            <E23Icon name={tab.icon} size={22} color={activeTab === tab.key ? '#F28C22' : '#667'} />
             <span className="tab-label">{tab.label}</span>
           </button>
         ))}
