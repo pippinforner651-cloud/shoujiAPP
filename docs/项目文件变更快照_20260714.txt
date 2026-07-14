@@ -30,7 +30,7 @@ Git 远程: git@github.com:pippinforner651-cloud/shoujiAPP.git
 ================================================================
 - 当前包名 com.e23running.app 与旧包名 com.chinarun.app 不同；旧应用数据不会自然继承。
 - Android 图标资源尚未完成 APK 或真机验证，不得写成已验收。
-- Android 本地构建仍依赖有效 SDK；local.properties 当前不存在。
+- Android 离线构建缺少 AGP 8.13.0 与 Google Services 4.4.4 缓存；local.properties 当前不存在，Android SDK 未配置。
 - 不得继续写入未经当次已认证 GitHub 查询确认的 Actions 运行号、APK 哈希或 Artifact ID。
 
 五、冻结数据

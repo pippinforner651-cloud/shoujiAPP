@@ -31,8 +31,8 @@
   },
   "validation": {
     "typescript": "passed_2026-07-14",
-    "vite_build": "passed_2026-07-14_with_css_warnings",
-    "android_build": "not_verified_locally",
+    "vite_build": "passed_2026-07-14_after_css_syntax_fix; bundle-size warning remains",
+    "android_build": "blocked: offline cache lacks com.android.tools.build:gradle:8.13.0 and com.google.gms:google-services:4.4.4; Android SDK is not configured",
     "apk": "not_verified_in_current_baseline",
     "device_visual_acceptance": "not_done"
   },
