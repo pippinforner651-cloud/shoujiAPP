@@ -1,10 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import ChinaMap from './components/ChinaMap';
-import AchievementHub from './components/AchievementHub';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import CityBottomSheet from './components/CityBottomSheet';
 import E23Icon from './components/E23Icon';
-import MyProfile from './components/MyProfile';
-import RunSession from './components/RunSession';
 import { useAchievementStore } from './store/achievementStore';
 import { useCityStore } from './store/cityStore';
 import { subscribeProgress, useProgressStore } from './store/progressStore';
@@ -12,6 +8,15 @@ import { useRunStore } from './store/runStore';
 import { useUserStore } from './store/userStore';
 import { buildHomeJourney } from './utils/homeJourney';
 import './App.css';
+
+const ChinaMap = lazy(() => import('./components/ChinaMap'));
+const AchievementHub = lazy(() => import('./components/AchievementHub'));
+const MyProfile = lazy(() => import('./components/MyProfile'));
+const RunSession = lazy(() => import('./components/RunSession'));
+
+function LoadingPanel({ label }: { label: string }) {
+  return <div className="lazy-panel" role="status"><i /><span>{label}</span></div>;
+}
 
 type AppTab = 'home' | 'run' | 'rank' | 'profile';
 const tabs: { key: AppTab; label: string; icon: 'home' | 'run' | 'rank' | 'profile' }[] = [
@@ -100,7 +105,7 @@ export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
 
             <section className="home-map-journey" aria-label="中国环游路线地图">
               <div className="section-heading"><div><p className="section-kicker">路线位置</p><h2>每一步都在地图上发生</h2></div></div>
-              <ChinaMap mode="personal" height="228px" />
+              <Suspense fallback={<LoadingPanel label="正在加载路线地图" />}><ChinaMap mode="personal" height="228px" /></Suspense>
             </section>
 
             {home.hasRecords && (
@@ -123,9 +128,9 @@ export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
           </div>
         )}
 
-        {activeTab === 'run' && <div className="tab-page"><RunSession onBackHome={() => setActiveTab('home')} onViewMap={() => setActiveTab('home')} /></div>}
-        {activeTab === 'rank' && <div className="tab-page tab-scroll"><AchievementHub /></div>}
-        {activeTab === 'profile' && <div className="tab-page tab-scroll"><MyProfile onLogout={onLogout} /></div>}
+        {activeTab === 'run' && <div className="tab-page"><Suspense fallback={<LoadingPanel label="正在准备跑步记录" />}><RunSession onBackHome={() => setActiveTab('home')} onViewMap={() => setActiveTab('home')} /></Suspense></div>}
+        {activeTab === 'rank' && <div className="tab-page tab-scroll"><Suspense fallback={<LoadingPanel label="正在读取本地成就" />}><AchievementHub /></Suspense></div>}
+        {activeTab === 'profile' && <div className="tab-page tab-scroll"><Suspense fallback={<LoadingPanel label="正在读取个人旅程" />}><MyProfile onLogout={onLogout} /></Suspense></div>}
       </main>
 
       <nav className="bottom-tabs" aria-label="主要导航">
