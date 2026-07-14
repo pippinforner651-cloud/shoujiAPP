@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import ChinaMap from './components/ChinaMap';
+import AchievementHub from './components/AchievementHub';
 import CityBottomSheet from './components/CityBottomSheet';
 import E23Icon from './components/E23Icon';
-import FriendsList from './components/FriendsList';
-import GlobalProgressCard from './components/GlobalProgressCard';
-import GlobalRanking from './components/GlobalRanking';
 import MyProfile from './components/MyProfile';
 import RunSession from './components/RunSession';
-import { BRAND } from './config/brand';
+import { useAchievementStore } from './store/achievementStore';
 import { useCityStore } from './store/cityStore';
 import { subscribeProgress, useProgressStore } from './store/progressStore';
 import { useRunStore } from './store/runStore';
@@ -19,7 +17,7 @@ type AppTab = 'home' | 'run' | 'rank' | 'profile';
 const tabs: { key: AppTab; label: string; icon: 'home' | 'run' | 'rank' | 'profile' }[] = [
   { key: 'home', label: '旅程', icon: 'home' },
   { key: 'run', label: '跑步', icon: 'run' },
-  { key: 'rank', label: '同行', icon: 'rank' },
+  { key: 'rank', label: '成就', icon: 'rank' },
   { key: 'profile', label: '我的', icon: 'profile' },
 ];
 
@@ -35,6 +33,7 @@ export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
   const unlockedCities = useCityStore((state) => state.unlockedCities);
   const progress = useProgressStore((state) => state.info);
   const initializeProgress = useProgressStore((state) => state.initialize);
+  const initializeAchievements = useAchievementStore((state) => state.initialize);
   const account = useUserStore((state) => state.account);
   const home = useMemo(() => buildHomeJourney(records), [records]);
 
@@ -42,8 +41,9 @@ export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
     initializeRuns();
     initializeCities();
     initializeProgress();
+    initializeAchievements();
     subscribeProgress();
-  }, [initializeRuns, initializeCities, initializeProgress]);
+  }, [initializeRuns, initializeCities, initializeProgress, initializeAchievements]);
 
   useEffect(() => {
     checkAndUnlock(stats.totalDistanceKm);
@@ -124,7 +124,7 @@ export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
         )}
 
         {activeTab === 'run' && <div className="tab-page"><RunSession onBackHome={() => setActiveTab('home')} onViewMap={() => setActiveTab('home')} /></div>}
-        {activeTab === 'rank' && <div className="tab-page tab-scroll"><div className="rank-header"><h2 className="rank-header-title">{BRAND.RANKING.title}</h2><p className="rank-header-desc">{BRAND.RANKING.description}</p></div><GlobalProgressCard /><GlobalRanking /><FriendsList /></div>}
+        {activeTab === 'rank' && <div className="tab-page tab-scroll"><AchievementHub /></div>}
         {activeTab === 'profile' && <div className="tab-page tab-scroll"><MyProfile onLogout={onLogout} /></div>}
       </main>
 

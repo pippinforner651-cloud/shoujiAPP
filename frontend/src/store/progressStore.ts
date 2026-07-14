@@ -61,7 +61,7 @@ function computeProgress(realKm: number): ProgressInfo {
     remainingToNextKm: Math.round(routeProgress.distanceToNextCityKm * 100) / 100,
     remainingToNextRealKm: Math.round((routeProgress.distanceToNextCityKm / getRouteData().meta.scaleRatio) * 100) / 100,
     headingToCity: routeProgress.isCompleted
-      ? '🏆 已完成全程！'
+      ? '已完成全程'
       : routeProgress.nextCity ?? '数据加载中',
   };
 }

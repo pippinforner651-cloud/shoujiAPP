@@ -21,7 +21,7 @@ export interface Achievement {
   name: string;
   /** 描述 */
   description: string;
-  /** 图标 emoji */
+  /** 统一 SVG 图标语义名 */
   icon: string;
   /** 成就类型 */
   category: AchievementCategory;
@@ -63,26 +63,28 @@ export interface UserLevel {
 
 export const ALL_ACHIEVEMENTS: Achievement[] = [
   // === 里程类 ===
-  { id: 'dist_10', name: '起步', description: '累计跑步 10 公里', icon: '👟', category: 'distance', condition: { type: 'total_km', threshold: 10 }, xpReward: 10 },
-  { id: 'dist_42', name: '马拉松入门', description: '累计跑步 42.195 公里', icon: '🏅', category: 'distance', condition: { type: 'total_km', threshold: 42.195 }, xpReward: 50 },
-  { id: 'dist_100', name: '百里跑者', description: '累计跑步 100 公里', icon: '🏆', category: 'distance', condition: { type: 'total_km', threshold: 100 }, xpReward: 100 },
-  { id: 'dist_500', name: '长途旅者', description: '累计跑步 500 公里', icon: '🚀', category: 'distance', condition: { type: 'total_km', threshold: 500 }, xpReward: 300 },
-  { id: 'dist_1000', name: '千里马', description: '累计跑步 1000 公里', icon: '🦄', category: 'distance', condition: { type: 'total_km', threshold: 1000 }, xpReward: 500 },
-  { id: 'dist_5000', name: '环游中国', description: '累计跑步 5000 公里', icon: '🌏', category: 'distance', condition: { type: 'total_km', threshold: 5000 }, xpReward: 1000 },
+  { id: 'dist_first', name: '首次出发', description: '完成第一条跑步记录', icon: 'flag', category: 'distance', condition: { type: 'total_km', threshold: 0.1 }, xpReward: 10 },
+  { id: 'dist_5', name: '五公里起步', description: '累计跑步 5 公里', icon: 'run', category: 'distance', condition: { type: 'total_km', threshold: 5 }, xpReward: 15 },
+  { id: 'dist_10', name: '十公里跑者', description: '累计跑步 10 公里', icon: 'route', category: 'distance', condition: { type: 'total_km', threshold: 10 }, xpReward: 20 },
+  { id: 'dist_42', name: '马拉松入门', description: '累计跑步 42.195 公里', icon: 'award', category: 'distance', condition: { type: 'total_km', threshold: 42.195 }, xpReward: 50 },
+  { id: 'dist_100', name: '百里跑者', description: '累计跑步 100 公里', icon: 'trophy', category: 'distance', condition: { type: 'total_km', threshold: 100 }, xpReward: 100 },
+  { id: 'dist_500', name: '长途旅者', description: '累计跑步 500 公里', icon: 'route', category: 'distance', condition: { type: 'total_km', threshold: 500 }, xpReward: 300 },
+  { id: 'dist_1000', name: '千里跑者', description: '累计跑步 1000 公里', icon: 'trophy', category: 'distance', condition: { type: 'total_km', threshold: 1000 }, xpReward: 500 },
+  { id: 'dist_5000', name: '环游中国', description: '累计跑步 5000 公里', icon: 'map', category: 'distance', condition: { type: 'total_km', threshold: 5000 }, xpReward: 1000 },
 
   // === 城市类 ===
-  { id: 'city_1', name: '出发', description: '离开深圳到达第一个城市', icon: '🚩', category: 'city', condition: { type: 'city_unlock', threshold: 1 }, xpReward: 20 },
-  { id: 'city_10', name: '探索者', description: '解锁 10 个城市', icon: '🔍', category: 'city', condition: { type: 'city_unlock', threshold: 10 }, xpReward: 100 },
-  { id: 'city_20', name: '旅行达人', description: '解锁 20 个城市', icon: '🧭', category: 'city', condition: { type: 'city_unlock', threshold: 20 }, xpReward: 200 },
-  { id: 'city_35', name: '半程勇士', description: '解锁 35 个城市（过半）', icon: '⚔️', category: 'city', condition: { type: 'city_unlock', threshold: 35 }, xpReward: 500 },
-  { id: 'city_48', name: '环游达人', description: '解锁全部 48 个城市', icon: '👑', category: 'city', condition: { type: 'city_unlock', threshold: 48 }, xpReward: 1000 },
+  { id: 'city_1', name: '抵达第一站', description: '离开深圳，到达第一个新城市', icon: 'flag', category: 'city', condition: { type: 'city_unlock', threshold: 2 }, xpReward: 20 },
+  { id: 'city_10', name: '城市探索者', description: '解锁 10 个城市', icon: 'map', category: 'city', condition: { type: 'city_unlock', threshold: 10 }, xpReward: 100 },
+  { id: 'city_20', name: '旅程进阶', description: '解锁 20 个城市', icon: 'route', category: 'city', condition: { type: 'city_unlock', threshold: 20 }, xpReward: 200 },
+  { id: 'city_35', name: '远途跑者', description: '解锁 35 个城市', icon: 'route', category: 'city', condition: { type: 'city_unlock', threshold: 35 }, xpReward: 500 },
+  { id: 'city_48', name: '完成中国环线', description: '解锁全部 48 个城市', icon: 'trophy', category: 'city', condition: { type: 'city_unlock', threshold: 48 }, xpReward: 1000 },
 
   // === 连续类 ===
-  { id: 'streak_3', name: '三天打鱼', description: '连续跑步 3 天', icon: '🐟', category: 'streak', condition: { type: 'streak_days', threshold: 3 }, xpReward: 30 },
-  { id: 'streak_7', name: '一周达人', description: '连续跑步 7 天', icon: '📅', category: 'streak', condition: { type: 'streak_days', threshold: 7 }, xpReward: 70 },
-  { id: 'streak_14', name: '两周坚持', description: '连续跑步 14 天', icon: '💪', category: 'streak', condition: { type: 'streak_days', threshold: 14 }, xpReward: 150 },
-  { id: 'streak_30', name: '月跑者', description: '连续跑步 30 天', icon: '🌙', category: 'streak', condition: { type: 'streak_days', threshold: 30 }, xpReward: 300 },
-  { id: 'streak_100', name: '百天跑者', description: '连续跑步 100 天', icon: '⭐', category: 'streak', condition: { type: 'streak_days', threshold: 100 }, xpReward: 1000 },
+  { id: 'streak_3', name: '连续三天', description: '连续跑步 3 天', icon: 'fire', category: 'streak', condition: { type: 'streak_days', threshold: 3 }, xpReward: 30 },
+  { id: 'streak_7', name: '连续一周', description: '连续跑步 7 天', icon: 'calendar', category: 'streak', condition: { type: 'streak_days', threshold: 7 }, xpReward: 70 },
+  { id: 'streak_14', name: '两周坚持', description: '连续跑步 14 天', icon: 'calendar', category: 'streak', condition: { type: 'streak_days', threshold: 14 }, xpReward: 150 },
+  { id: 'streak_30', name: '月度坚持', description: '连续跑步 30 天', icon: 'fire', category: 'streak', condition: { type: 'streak_days', threshold: 30 }, xpReward: 300 },
+  { id: 'streak_100', name: '百日坚持', description: '连续跑步 100 天', icon: 'award', category: 'streak', condition: { type: 'streak_days', threshold: 100 }, xpReward: 1000 },
 ];
 
 /* ===== 等级规则 ===== */
