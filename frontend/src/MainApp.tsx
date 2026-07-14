@@ -1,197 +1,138 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ChinaMap from './components/ChinaMap';
 import CityBottomSheet from './components/CityBottomSheet';
+import E23Icon from './components/E23Icon';
+import FriendsList from './components/FriendsList';
 import GlobalProgressCard from './components/GlobalProgressCard';
 import GlobalRanking from './components/GlobalRanking';
-import FriendsList from './components/FriendsList';
-import RunSession from './components/RunSession';
 import MyProfile from './components/MyProfile';
-import E23Icon from './components/E23Icon';
-import { useRunStore } from './store/runStore';
+import RunSession from './components/RunSession';
+import { BRAND } from './config/brand';
 import { useCityStore } from './store/cityStore';
-
 import { subscribeProgress, useProgressStore } from './store/progressStore';
-import { BRAND, getGreeting } from './config/brand';
+import { useRunStore } from './store/runStore';
+import { useUserStore } from './store/userStore';
+import { buildHomeJourney } from './utils/homeJourney';
 import './App.css';
 
 type AppTab = 'home' | 'run' | 'rank' | 'profile';
-
 const tabs: { key: AppTab; label: string; icon: 'home' | 'run' | 'rank' | 'profile' }[] = [
-  { key: 'home', label: '首页', icon: 'home' },
+  { key: 'home', label: '旅程', icon: 'home' },
   { key: 'run', label: '跑步', icon: 'run' },
-  { key: 'rank', label: '排行', icon: 'rank' },
+  { key: 'rank', label: '同行', icon: 'rank' },
   { key: 'profile', label: '我的', icon: 'profile' },
 ];
 
-interface Props {
-  onLogout: () => void;
-  initialTab?: 'home' | 'run';
-}
+interface Props { onLogout: () => void; initialTab?: 'home' | 'run'; }
 
 export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
-
-  const stats = useRunStore((s) => s.stats);
-  const records = useRunStore((s) => s.records);
-  const { initialize: initRun } = useRunStore();
-  const { initialize: initCity, checkAndUnlock } = useCityStore();
-  const progress = useProgressStore((s) => s.info);
-  const initProgress = useProgressStore((s) => s.initialize);
+  const stats = useRunStore((state) => state.stats);
+  const records = useRunStore((state) => state.records);
+  const initializeRuns = useRunStore((state) => state.initialize);
+  const initializeCities = useCityStore((state) => state.initialize);
+  const checkAndUnlock = useCityStore((state) => state.checkAndUnlock);
+  const unlockedCities = useCityStore((state) => state.unlockedCities);
+  const progress = useProgressStore((state) => state.info);
+  const initializeProgress = useProgressStore((state) => state.initialize);
+  const account = useUserStore((state) => state.account);
+  const home = useMemo(() => buildHomeJourney(records), [records]);
 
   useEffect(() => {
-    initRun();
-    initCity();
-    initProgress();
+    initializeRuns();
+    initializeCities();
+    initializeProgress();
     subscribeProgress();
-  }, [initRun, initCity, initProgress]);
+  }, [initializeRuns, initializeCities, initializeProgress]);
 
   useEffect(() => {
-    if (stats.totalDistanceKm > 0) checkAndUnlock(stats.totalDistanceKm);
+    checkAndUnlock(stats.totalDistanceKm);
   }, [stats.totalDistanceKm, checkAndUnlock]);
 
-  // 首页核心数据全部读取同一个路线进度来源。
-  const virtualKm = progress.virtualKm;
-  const todayKm = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    return records.filter((r) => r.date === today).reduce((s, r) => s + r.distanceKm, 0);
-  }, [records]);
-
+  const lastRun = records[records.length - 1] ?? null;
   const currentCity = progress.currentCity?.city ?? '深圳';
-  const nextCity = progress.headingToCity;
-  const remainingKm = progress.remainingToNextKm;
-
-  const lastRun = useMemo(() => {
-    if (!records.length) return null;
-    return records[records.length - 1];
-  }, [records]);
-
-  const streakDays = useMemo(() => {
-    if (!records.length) return 0;
-    let streak = 0;
-    const d = new Date();
-    while (true) {
-      const ds = d.toISOString().slice(0, 10);
-      if (records.some((r) => r.date === ds)) { streak++; d.setDate(d.getDate() - 1); }
-      else break;
-    }
-    return streak;
-  }, [records]);
+  const nextCity = progress.nextCity?.city ?? '全程完成';
+  const todayRemaining = Math.max(0, home.goalKm - home.todayKm);
 
   return (
     <div className="app app-mobile">
       <main className="app-main-mobile">
         {activeTab === 'home' && (
-          <div className="tab-page tab-scroll">
-            {/* 问候区 */}
-            <div className="home-greeting">
-              <span>{getGreeting()}</span>
-              <span className="home-greeting-city">📍 {currentCity}</span>
-            </div>
+          <div className="tab-page tab-scroll journey-home">
+            <header className="journey-header">
+              <div><p>{home.hasRecords ? '欢迎回来' : '欢迎出发'}</p><h1>{account.nickname || 'E23跑者'}</h1></div>
+              <div className="journey-location"><E23Icon name="route" size={16} />{currentCity}</div>
+            </header>
 
-            {/* 核心数据区 */}
-            <div className="home-dashboard">
-              <div className="home-dash-card accent">
-                <span className="home-dash-val">{todayKm.toFixed(1)}</span>
-                <span className="home-dash-label">今日跑量 (km)</span>
-              </div>
-              <div className="home-dash-card">
-                <span className="home-dash-val">{stats.totalDistanceKm.toFixed(0)}</span>
-                <span className="home-dash-label">累计 (km)</span>
-              </div>
-              <div className="home-dash-card">
-                <span className="home-dash-val">{virtualKm.toLocaleString()}</span>
-                <span className="home-dash-label">虚拟里程 (km)</span>
-              </div>
-              <div className="home-dash-card">
-                <span className="home-dash-val">{streakDays}</span>
-                <span className="home-dash-label">连续天数</span>
-              </div>
-            </div>
-
-            {/* 进度卡 */}
-            <div className="home-progress-card">
-              <div className="home-progress-header">
-                <span className="home-progress-title">E23当前到达</span>
-                <span className="home-progress-map-btn" onClick={() => setActiveTab('home')}>查看地图 ›</span>
-              </div>
-              <div className="home-progress-cities">
-                <span className="home-progress-city current">{currentCity}</span>
-                <span className="home-progress-arrow">→</span>
-                <span className="home-progress-city next">{nextCity}</span>
-              </div>
-              <div className="home-progress-bar">
-                <div className="home-progress-fill" style={{ width: `${progress.completionRate}%` }} />
-              </div>
-              <span className="home-progress-remaining">距下一站还有 {remainingKm.toLocaleString()} 虚拟公里</span>
-            </div>
-
-            {/* 地图缩略 */}
-            <div className="home-map-mini">
-              <ChinaMap mode="personal" height="200px" />
-            </div>
-
-            {/* 最近跑步 */}
-            {lastRun ? (
-              <div className="home-last-run">
-                <span className="home-last-run-title">最近运动</span>
-                <div className="home-last-run-card">
-                  <span className="home-last-run-date">{lastRun.date}</span>
-                  <span className="home-last-run-dist">{lastRun.distanceKm.toFixed(2)} km</span>
-                  <span className="home-last-run-dur">{Math.round(lastRun.durationMin)} 分钟</span>
-                </div>
-              </div>
+            {!home.hasRecords ? (
+              <section className="first-run-hero">
+                <div className="first-run-route"><span>深圳</span><div><i /></div><span>厦门</span></div>
+                <p className="section-kicker">你的中国旅程等待第一步</p>
+                <h2>跑1公里，路线前进10公里</h2>
+                <p>从深圳出发，沿48座城市完成21,423公里的闭环旅程。记录保存在当前设备。</p>
+                <button className="primary-action" onClick={() => setActiveTab('run')}>
+                  <E23Icon name="run" size={20} /> 录入第一条跑步
+                </button>
+              </section>
             ) : (
-              <div className="home-empty-state">
-                <E23Icon name="runner" size={48} color="#667" />
-                <p className="home-empty-text">还没有跑步记录</p>
-                <p className="home-empty-hint">完成一次跑步，成为首位出发的E23跑者</p>
-              </div>
+              <section className={`today-action-card ${home.goalCompleted ? 'completed' : ''}`}>
+                <div className="today-action-top">
+                  <div><p className="section-kicker">今日行动</p><h2>{home.primaryPrompt}</h2></div>
+                  <span>{home.goalCompleted ? '已完成' : `还差 ${todayRemaining.toFixed(1)} km`}</span>
+                </div>
+                <div className="today-distance"><strong>{home.todayKm.toFixed(1)}</strong><span>/ {home.goalKm} km</span></div>
+                <div className="today-goal-track"><i style={{ width: `${home.goalPercent}%` }} /></div>
+                <button className="primary-action" onClick={() => setActiveTab('run')}>
+                  <E23Icon name="run" size={20} /> {home.goalCompleted ? '再跑一段' : '开始今天的跑步'}
+                </button>
+              </section>
             )}
 
-            {/* CTA */}
-            <button className="home-start-btn" onClick={() => setActiveTab('run')}>
-              <E23Icon name="run" size={20} color="#fff" />
-              <span>{BRAND.HOME.startRun}</span>
-            </button>
+            <section className="journey-card-v1">
+              <div className="section-heading"><div><p className="section-kicker">当前旅程</p><h2>{currentCity} <span>前往</span> {nextCity}</h2></div><strong>{progress.completionRate.toFixed(1)}%</strong></div>
+              <div className="journey-progress-track"><i style={{ width: `${progress.completionRate}%` }} /></div>
+              <div className="journey-metrics">
+                <div><span>距下一站</span><strong>{progress.remainingToNextKm.toLocaleString()}<small> 虚拟km</small></strong></div>
+                <div><span>还需真实跑步</span><strong>{progress.remainingToNextRealKm.toFixed(1)}<small> km</small></strong></div>
+              </div>
+              <p className="journey-route-note">累计实际 {stats.totalDistanceKm.toFixed(1)} km · 虚拟推进 {progress.virtualKm.toLocaleString()} km</p>
+            </section>
+
+            <section className="home-map-journey" aria-label="中国环游路线地图">
+              <div className="section-heading"><div><p className="section-kicker">路线位置</p><h2>每一步都在地图上发生</h2></div></div>
+              <ChinaMap mode="personal" height="228px" />
+            </section>
+
+            {home.hasRecords && (
+              <section className="recent-results">
+                <div className="section-heading"><div><p className="section-kicker">近期成果</p><h2>你的坚持正在累积</h2></div></div>
+                <div className="result-grid">
+                  <article><span>近7天</span><strong>{home.weekKm.toFixed(1)} km</strong></article>
+                  <article><span>连续跑步</span><strong>{home.streakDays} 天</strong></article>
+                  <article><span>已解锁城市</span><strong>{unlockedCities.length} / 48</strong></article>
+                </div>
+                {lastRun && <div className="last-run-row"><div><span>最近一次 · {lastRun.date}</span><strong>{lastRun.distanceKm.toFixed(2)} km</strong></div><span>{lastRun.durationMin.toFixed(0)} 分钟</span></div>}
+              </section>
+            )}
+
+            <section className="next-motivation-card">
+              <div><p className="section-kicker">下一个里程碑</p><h2>{home.nextMilestone.label}</h2>
+                <p>{home.hasRecords ? `再跑 ${home.nextMilestone.remainingKm.toFixed(1)} km 即可达成` : '完成一次真实记录，旅程就会开始推进'}</p></div>
+              <button onClick={() => setActiveTab(home.hasRecords ? 'profile' : 'run')}>{home.hasRecords ? '查看我的旅程' : '现在出发'}</button>
+            </section>
           </div>
         )}
 
-        {activeTab === 'run' && (
-          <div className="tab-page"><RunSession /></div>
-        )}
-
-        {activeTab === 'rank' && (
-          <div className="tab-page tab-scroll">
-            <div className="rank-header">
-              <h2 className="rank-header-title">{BRAND.RANKING.title}</h2>
-              <p className="rank-header-desc">{BRAND.RANKING.description}</p>
-            </div>
-            <GlobalProgressCard />
-            <GlobalRanking />
-            <FriendsList />
-          </div>
-        )}
-
-        {activeTab === 'profile' && (
-          <div className="tab-page tab-scroll">
-            <MyProfile onLogout={onLogout} />
-          </div>
-        )}
+        {activeTab === 'run' && <div className="tab-page"><RunSession /></div>}
+        {activeTab === 'rank' && <div className="tab-page tab-scroll"><div className="rank-header"><h2 className="rank-header-title">{BRAND.RANKING.title}</h2><p className="rank-header-desc">{BRAND.RANKING.description}</p></div><GlobalProgressCard /><GlobalRanking /><FriendsList /></div>}
+        {activeTab === 'profile' && <div className="tab-page tab-scroll"><MyProfile onLogout={onLogout} /></div>}
       </main>
 
-      <nav className="bottom-tabs">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            className={`tab-btn ${activeTab === tab.key ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.key)}
-          >
-            <E23Icon name={tab.icon} size={22} color={activeTab === tab.key ? '#F28C22' : '#667'} />
-            <span className="tab-label">{tab.label}</span>
-          </button>
-        ))}
+      <nav className="bottom-tabs" aria-label="主要导航">
+        {tabs.map((tab) => <button key={tab.key} className={`tab-btn ${activeTab === tab.key ? 'active' : ''}`} onClick={() => setActiveTab(tab.key)}>
+          <E23Icon name={tab.icon} size={22} color={activeTab === tab.key ? '#F28C22' : '#667085'} /><span className="tab-label">{tab.label}</span>
+        </button>)}
       </nav>
-
       <CityBottomSheet />
     </div>
   );
