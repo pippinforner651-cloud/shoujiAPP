@@ -4,7 +4,7 @@
   "frontend_root": "D:\\workbuddy制作文件\\全民环游中国虚拟跑步地图_V1\\frontend",
   "build_entry": "frontend/package.json",
   "repository": "git@github.com:pippinforner651-cloud/shoujiAPP.git",
-  "baseline_commit": "2f5f02b5d06d752bcc3810dd47ca12e469495e45",
+  "baseline_commit": "c1cb697f44ff33a976447635dd4e720611408620",
   "web_url": "https://33764578423842b8a0268b9842908784.app.codebuddy.work",
   "route": {
     "file": "data/route_master_v1.json",
@@ -25,20 +25,23 @@
   "auth": {
     "mode": "test_mock",
     "sms": "mock_fixed_123456",
-    "wechat": "mock_with_warning",
+    "wechat": "unavailable_with_honest_notice",
     "real_sms_connected": false,
     "real_wechat_sdk_connected": false
   },
   "validation": {
-    "typescript": "passed_2026-07-14",
-    "vite_build": "passed_2026-07-14_after_css_syntax_fix; bundle-size warning remains",
+    "typescript": "passed_2026-07-14_after_v1_core_experience",
+    "automated_tests": "32_passed_2026-07-14",
+    "vite_build": "passed_2026-07-14; initial_main_js_309.03_kb_gzip_100.08_kb; echarts_map_chunks_still_over_500_kb",
     "android_build": "blocked: offline cache lacks com.android.tools.build:gradle:8.13.0 and com.google.gms:google-services:4.4.4; Android SDK is not configured",
     "apk": "not_verified_in_current_baseline",
-    "device_visual_acceptance": "not_done"
+    "icon_validation": "android_all_density_and_pwa_192_512_passed",
+    "mobile_visual_acceptance": "passed_at_320_375_390_414; login_manual_run_summary_achievement_profile; zero_console_errors"
   },
   "known_risks": [
     "Android package-name change prevents automatic inheritance of old app WebView local data.",
     "The working tree must be checked live before any commit; do not reuse historical file counts.",
-    "The current launcher icon resources require adaptive-icon and APK verification before release."
+    "Production launcher resources passed static dimension and adaptive safe-zone validation, but still require APK/device verification.",
+    "Real SMS, WeChat login, cloud sync, online ranking and multiplayer are not connected."
   ]
 }
