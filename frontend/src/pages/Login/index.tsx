@@ -1,56 +1,77 @@
 import { useState, useRef } from 'react';
-import { useUserStore } from '../../store/userStore';
+import { useUserStore, loginMockCode } from '../../store/userStore';
 import { mockSmsAdapter } from '../../services/sms/mockSms';
+import { BRAND } from '../../config/brand';
 
 interface Props {
   onGoToRegister: () => void;
   onLoginSuccess: () => void;
 }
 
+function BrandMark({ size = 72 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 200 200" style={{ width: size, height: size }}>
+      <defs>
+        <linearGradient id="loginBgGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0D2B45" />
+          <stop offset="100%" stopColor="#1E3A5F" />
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="200" height="200" rx="44" ry="44" fill="url(#loginBgGrad)" />
+      <ellipse cx="100" cy="160" rx="120" ry="40" fill="#F28C22" />
+      <ellipse cx="80" cy="145" rx="80" ry="35" fill="#FAD7A0" />
+      <ellipse cx="100" cy="135" rx="55" ry="30" fill="#FFF4E0" />
+      <circle cx="100" cy="110" r="18" fill="#FFE6B4" opacity="0.85" />
+      <text x="100" y="48" textAnchor="middle" fill="#FFFFFF" fontSize="40" fontWeight="900" fontFamily="Arial Black, sans-serif">E23</text>
+      <text x="100" y="72" textAnchor="middle" fill="#FFFFFF" fontSize="12" fontWeight="700">跑起来</text>
+      <g fill="#0D2B45">
+        <circle cx="115" cy="148" r="3.5" />
+        <path d="M115 151 L118 162 L116 170 M118 162 L112 168 M118 162 L123 167" stroke="#0D2B45" strokeWidth="1.5" fill="none" />
+        <circle cx="92" cy="150" r="3" />
+        <path d="M92 153 L94 162 L92 170 M94 162 L89 168 M94 162 L98 167" stroke="#0D2B45" strokeWidth="1.3" fill="none" />
+        <circle cx="72" cy="152" r="2.5" />
+        <path d="M72 154 L74 162 L72 169 M74 162 L70 168 M74 162 L77 167" stroke="#0D2B45" strokeWidth="1.1" fill="none" />
+      </g>
+    </svg>
+  );
+}
+
 export default function Login({ onGoToRegister, onLoginSuccess }: Props) {
-  const [phone, setPhone] = useState('13800138000');
-  const [code, setCode] = useState('123456');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [codeMsg, setCodeMsg] = useState('');
   const [countdown, setCountdown] = useState(0);
+  const [showWechatDialog, setShowWechatDialog] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { phoneLogin, wechatLogin } = useUserStore();
 
-  // 发送验证码
   const handleSendCode = async () => {
-    if (!phone) { setError('请输入手机号'); return; }
+    if (!phone) { setError(BRAND.AUTH.errorPhone); return; }
     if (countdown > 0) return;
     setError('');
     setCodeMsg('');
 
-    console.log('[Login] 发送验证码到:', phone);
-    const result = await mockSmsAdapter.sendCode(phone);
-    console.log('[Login] 发送结果:', result);
+    await mockSmsAdapter.sendCode(phone);
+    setCodeMsg(BRAND.AUTH.testCodeMsg);
 
-    if (result.success) {
-      setCodeMsg('验证码发送成功！测试验证码：123456');
-
-      // 60秒倒计时
-      setCountdown(60);
-      timerRef.current = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            if (timerRef.current) clearInterval(timerRef.current);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      setError('验证码发送失败');
-    }
+    setCountdown(60);
+    timerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
   const handleLogin = async () => {
-    if (!phone) { setError('请输入手机号'); return; }
-    if (!code) { setError('请输入验证码'); return; }
+    if (!phone) { setError(BRAND.AUTH.errorPhone); return; }
+    if (!code) { setError(BRAND.AUTH.errorCode); return; }
     setLoading(true);
     setError('');
 
@@ -60,11 +81,16 @@ export default function Login({ onGoToRegister, onLoginSuccess }: Props) {
     if (result.success) {
       onLoginSuccess();
     } else {
-      setError(result.error || '登录失败');
+      setError(BRAND.AUTH.errorCode);
     }
   };
 
-  const handleWechat = async () => {
+  const handleWechatMock = () => {
+    setShowWechatDialog(true);
+  };
+
+  const confirmWechatMock = async () => {
+    setShowWechatDialog(false);
     setLoading(true);
     const result = await wechatLogin();
     setLoading(false);
@@ -73,35 +99,36 @@ export default function Login({ onGoToRegister, onLoginSuccess }: Props) {
 
   return (
     <div className="login-page">
-      <div className="login-header">
-        <div className="login-logo">🌏</div>
-        <h1 className="login-title">全民环游中国</h1>
+      <div className="login-brand">
+        <div className="login-brand-mark">
+          <BrandMark size={72} />
+        </div>
+        <h1 className="login-title">{BRAND.APP_NAME}</h1>
+        <p className="login-subtitle">{BRAND.TAGLINE}</p>
       </div>
 
       <div className="login-form">
-        {/* 手机号 */}
         <div className="login-field">
-          <label className="login-label">手机号</label>
+          <label className="login-label">{BRAND.AUTH.phoneLabel}</label>
           <input
             className="login-input"
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="请输入手机号"
+            placeholder={BRAND.AUTH.phonePlaceholder}
             maxLength={11}
           />
         </div>
 
-        {/* 验证码 */}
         <div className="login-field">
-          <label className="login-label">验证码</label>
+          <label className="login-label">{BRAND.AUTH.codeLabel}</label>
           <div className="login-code-row">
             <input
               className="login-input code-input"
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder="请输入验证码"
+              placeholder={BRAND.AUTH.codePlaceholder}
               maxLength={6}
             />
             <button
@@ -109,7 +136,7 @@ export default function Login({ onGoToRegister, onLoginSuccess }: Props) {
               onClick={handleSendCode}
               disabled={countdown > 0}
             >
-              {countdown > 0 ? `${countdown}s` : '获取验证码'}
+              {countdown > 0 ? `${BRAND.AUTH.resendCode}（${countdown}s）` : BRAND.AUTH.getCodeBtn}
             </button>
           </div>
           {codeMsg && <div className="login-hint success">{codeMsg}</div>}
@@ -117,27 +144,48 @@ export default function Login({ onGoToRegister, onLoginSuccess }: Props) {
 
         {error && <div className="login-error">{error}</div>}
 
-        {/* 登录按钮 */}
         <button className="login-btn" onClick={handleLogin} disabled={loading}>
-          {loading ? '登录中...' : '登录'}
+          {loading ? BRAND.AUTH.loginProcessing : BRAND.AUTH.loginBtn}
         </button>
 
-        {/* 注册入口 */}
         <div className="login-register-row">
           <span className="login-register-text">还没有账号？</span>
           <button className="login-register-link" onClick={onGoToRegister}>立即注册</button>
         </div>
 
-        {/* 分隔 */}
-        <div className="login-divider">
-          <span>或</span>
-        </div>
+        <div className="login-divider"><span>或</span></div>
 
-        {/* 微信登录 */}
-        <button className="login-wechat-btn" onClick={handleWechat} disabled={loading}>
-          🟢 微信授权登录
+        <button className="login-wechat-btn" onClick={handleWechatMock} disabled={loading}>
+          🟢 {BRAND.AUTH.wechatBtn}
         </button>
+
+        <div className="login-footer">
+          <span className="login-footer-link">《用户协议》</span>
+          <span className="login-footer-dot">·</span>
+          <span className="login-footer-link">《隐私政策》</span>
+        </div>
+        <div className="login-footer-test">
+          {BRAND.AUTH.footerVersion} · {BRAND.AUTH.footerTest}
+        </div>
       </div>
+
+      {showWechatDialog && (
+        <div className="login-dialog-overlay" onClick={() => setShowWechatDialog(false)}>
+          <div className="login-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="login-dialog-icon">⚠️</div>
+            <div className="login-dialog-title">{BRAND.AUTH.wechatDialogTitle}</div>
+            <div className="login-dialog-body">{BRAND.AUTH.wechatDialogBody}</div>
+            <div className="login-dialog-actions">
+              <button className="login-dialog-btn cancel" onClick={() => setShowWechatDialog(false)}>
+                {BRAND.AUTH.wechatCancel}
+              </button>
+              <button className="login-dialog-btn confirm" onClick={confirmWechatMock}>
+                {BRAND.AUTH.wechatConfirm}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

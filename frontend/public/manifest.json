@@ -1,11 +1,11 @@
 {
-  "name": "全民环游中国虚拟跑步地图",
-  "short_name": "环游中国",
-  "description": "跑遍中国 · 足不出户 — 将现实跑步映射到虚拟中国地图的 Web 应用",
+  "name": "E23跑起来",
+  "short_name": "E23跑起来",
+  "description": "从戈壁出发，奔向世界 — 挑战、团队、坚持、超越、长期奔跑",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f2027",
-  "theme_color": "#0f2027",
+  "background_color": "#0D2B45",
+  "theme_color": "#0D2B45",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",

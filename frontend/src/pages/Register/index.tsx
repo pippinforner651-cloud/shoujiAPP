@@ -1,6 +1,10 @@
 import { useState, useRef } from 'react';
-import { useUserStore } from '../../store/userStore';
+import { useUserStore, loginMockCode } from '../../store/userStore';
 import { mockSmsAdapter } from '../../services/sms/mockSms';
+import { BRAND } from '../../config/brand';
+
+const APP_NAME = BRAND.APP_NAME;
+const APP_SUBTITLE = BRAND.TAGLINE;
 
 interface Props {
   onBackToLogin: () => void;
@@ -11,6 +15,7 @@ export default function Register({ onBackToLogin, onRegisterSuccess }: Props) {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [realName, setRealName] = useState('');
+  const [agreeTerms, setAgreeTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [codeMsg, setCodeMsg] = useState('');
@@ -25,31 +30,28 @@ export default function Register({ onBackToLogin, onRegisterSuccess }: Props) {
     setError('');
     setCodeMsg('');
 
-    console.log('[Register] 发送验证码到:', phone);
-    const result = await mockSmsAdapter.sendCode(phone);
-    console.log('[Register] 发送结果:', result);
+    await mockSmsAdapter.sendCode(phone);
+    setCodeMsg(BRAND.AUTH.testCodeMsg);
 
-    if (result.success) {
-      setCodeMsg('验证码发送成功！测试验证码：123456');
-      setCountdown(60);
-      timerRef.current = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            if (timerRef.current) clearInterval(timerRef.current);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      setError('验证码发送失败');
-    }
+    setCountdown(60);
+    timerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
   const handleRegister = async () => {
-    if (!phone) { setError('请输入手机号'); return; }
-    if (!code) { setError('请输入验证码'); return; }
-    if (!realName) { setError('请输入真实姓名'); return; }
+    if (!realName.trim()) { setError(BRAND.AUTH.errorName); return; }
+    if (!phone) { setError(BRAND.AUTH.errorPhone); return; }
+    if (phone.length !== 11) { setError(BRAND.AUTH.errorPhone); return; }
+    if (!code) { setError(BRAND.AUTH.errorCode); return; }
+    if (!agreeTerms) { setError(BRAND.AUTH.errorAgreement); return; }
+
     setLoading(true);
     setError('');
 
@@ -65,37 +67,37 @@ export default function Register({ onBackToLogin, onRegisterSuccess }: Props) {
 
   return (
     <div className="login-page">
-      <div className="login-header">
-        <div className="login-logo">🌏</div>
-        <h1 className="login-title">注册账号</h1>
+      <div className="login-brand">
+        <h1 className="login-title">{APP_NAME}</h1>
+        <p className="login-subtitle">{APP_SUBTITLE}</p>
       </div>
 
       <div className="login-form">
-        <div className="login-field">
-          <label className="login-label">真实姓名</label>
+          <div className="login-field">
+          <label className="login-label">{BRAND.AUTH.realNameLabel}</label>
           <input
             className="login-input"
             type="text"
             value={realName}
             onChange={(e) => setRealName(e.target.value)}
-            placeholder="请输入真实姓名"
+            placeholder={BRAND.AUTH.realNamePlaceholder}
           />
         </div>
 
         <div className="login-field">
-          <label className="login-label">手机号</label>
+          <label className="login-label">{BRAND.AUTH.phoneLabel}</label>
           <input
             className="login-input"
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="请输入手机号"
+            placeholder={BRAND.AUTH.phonePlaceholder}
             maxLength={11}
           />
         </div>
 
         <div className="login-field">
-          <label className="login-label">验证码</label>
+          <label className="login-label">{BRAND.AUTH.codeLabel}</label>
           <div className="login-code-row">
             <input
               className="login-input code-input"
@@ -114,6 +116,22 @@ export default function Register({ onBackToLogin, onRegisterSuccess }: Props) {
             </button>
           </div>
           {codeMsg && <div className="login-hint success">{codeMsg}</div>}
+        </div>
+
+        <div className="login-agree-row">
+          <input
+            type="checkbox"
+            id="agree-terms"
+            checked={agreeTerms}
+            onChange={(e) => setAgreeTerms(e.target.checked)}
+            className="login-agree-checkbox"
+          />
+          <label htmlFor="agree-terms" className="login-agree-label">
+            {BRAND.AUTH.agreementText}
+            <span className="login-agree-link">用户协议</span>
+            和
+            <span className="login-agree-link">隐私政策</span>
+          </label>
         </div>
 
         {error && <div className="login-error">{error}</div>}

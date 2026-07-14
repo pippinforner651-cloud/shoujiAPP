@@ -1,17 +1,17 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.chinarun.app',
-  appName: '全民环游中国',
+  appId: 'com.e23running.app',
+  appName: 'E23跑起来',
   webDir: 'dist',
-  version: '1.0.0',
+  version: '1.0.1',
   server: {
     androidScheme: 'https',
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2500,
-      backgroundColor: '#0f2027',
+      launchShowDuration: 1800,
+      backgroundColor: '#0D2B45',
       androidScaleType: 'CENTER_CROP',
       androidSplashResourceName: 'splash',
     },
@@ -24,7 +24,7 @@ const config: CapacitorConfig = {
     },
   },
   android: {
-    backgroundColor: '#0f2027',
+    backgroundColor: '#0D2B45',
   },
 };
 

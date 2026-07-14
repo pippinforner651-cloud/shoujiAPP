@@ -1,7 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">全民环游中国</string>
-    <string name="title_activity_main">全民环游中国</string>
-    <string name="package_name">com.chinarun.app</string>
-    <string name="custom_url_scheme">com.chinarun.app</string>
+    <string name="app_name">E23跑起来</string>
+    <string name="app_subtitle">从戈壁出发，奔向世界</string>
+    <string name="title_activity_main">E23跑起来</string>
+    <string name="package_name">com.e23running.app</string>
+    <string name="custom_url_scheme">com.e23running.app</string>
 </resources>

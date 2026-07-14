@@ -87,12 +87,12 @@ jobs:
       - name: Rename Debug APK for Delivery
         run: |
           cp frontend/android/app/build/outputs/apk/debug/app-debug.apk \
-             全民环游中国_V1.0_安卓测试版.apk
-          echo "SHA256=$(sha256sum 全民环游中国_V1.0_安卓测试版.apk | cut -d' ' -f1)"
+             E23跑起来_V1.0.1_安卓测试版.apk
+          echo "SHA256=$(sha256sum E23跑起来_V1.0.1_安卓测试版.apk | cut -d' ' -f1)"
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 全民环游中国_V1.0_安卓测试版
-          path: 全民环游中国_V1.0_安卓测试版.apk
+          name: E23跑起来_V1.0.1_安卓测试版
+          path: E23跑起来_V1.0.1_安卓测试版.apk
           retention-days: 30
