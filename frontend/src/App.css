@@ -1633,6 +1633,7 @@
   margin: 0 0 1rem;
   white-space: pre-line;
 }
+.home-stats {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 0.3rem;
