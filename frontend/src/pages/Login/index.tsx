@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import E23BrandMark from '../../components/E23BrandMark';
 import E23Icon from '../../components/E23Icon';
 import { BRAND } from '../../config/brand';
 import { useUserStore } from '../../store/userStore';
@@ -38,7 +39,7 @@ export default function Login({ onGoToRegister, onLoginSuccess }: Props) {
     <main className="login-page">
       <section className="login-shell">
         <header className="login-brand">
-          <div className="login-brand-mark"><E23Icon name="route" size={38} /></div>
+          <E23BrandMark size={68} className="login-brand-mark" />
           <p className="login-eyebrow">48城 · 21,423公里 · 从深圳出发</p>
           <h1 className="login-title">{BRAND.APP_NAME}</h1>
           <p className="login-subtitle">每一步，都在环游中国</p>
