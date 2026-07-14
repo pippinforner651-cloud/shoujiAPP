@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useUserStore, loginMockCode } from '../../store/userStore';
+import { useUserStore } from '../../store/userStore';
 import { mockSmsAdapter } from '../../services/sms/mockSms';
 import { BRAND } from '../../config/brand';
 
