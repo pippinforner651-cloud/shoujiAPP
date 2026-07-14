@@ -60,3 +60,37 @@ test('clamps overrun and invalid negative distances without changing the frozen 
   assert.deepEqual([overrun.clampedVirtualDistanceKm, overrun.totalRouteKm, overrun.progressPercent], [21423, 21423, 100]);
   assert.deepEqual([invalid.actualDistanceKm, invalid.virtualDistanceKm, invalid.currentCity], [0, 0, '深圳']);
 });
+
+test('keeps the first city unlocked at zero distance', () => {
+  assert.deepEqual(calculateRouteProgress(0, route).unlockedCityIds, ['shenzhen']);
+});
+
+test('reports the first city boundary exactly', () => {
+  const result = calculateRouteProgress(50, route);
+  assert.deepEqual([result.currentCity, result.distanceIntoSegmentKm], ['厦门', 0]);
+});
+
+test('reports a normal mid-segment position', () => {
+  const result = calculateRouteProgress(75, route);
+  assert.deepEqual([result.currentCity, result.nextCity, result.distanceIntoSegmentKm], ['厦门', '广州', 250]);
+});
+
+test('reports Guangzhou exactly before closure', () => {
+  const result = calculateRouteProgress(2128.3, route);
+  assert.deepEqual([result.currentCity, result.distanceIntoSegmentKm, result.distanceToNextCityKm], ['广州', 0, 140]);
+});
+
+test('reports one virtual kilometre into closure', () => {
+  const result = calculateRouteProgress(2128.4, route);
+  assert.deepEqual([result.isOnClosureSegment, result.distanceIntoSegmentKm], [true, 1]);
+});
+
+test('reports the closure midpoint', () => {
+  const result = calculateRouteProgress(2135.3, route);
+  assert.deepEqual([result.distanceIntoSegmentKm, result.distanceToNextCityKm], [70, 70]);
+});
+
+test('reports one virtual kilometre before Shenzhen', () => {
+  const result = calculateRouteProgress(2142.2, route);
+  assert.deepEqual([result.nextCity, result.distanceToNextCityKm], ['深圳', 1]);
+});
