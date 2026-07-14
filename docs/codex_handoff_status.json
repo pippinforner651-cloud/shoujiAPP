@@ -1,0 +1,44 @@
+{
+  "project_name": "E23跑起来",
+  "project_root": "D:\\workbuddy制作文件\\全民环游中国虚拟跑步地图_V1",
+  "frontend_root": "D:\\workbuddy制作文件\\全民环游中国虚拟跑步地图_V1\\frontend",
+  "build_entry": "frontend/package.json",
+  "repository": "git@github.com:pippinforner651-cloud/shoujiAPP.git",
+  "baseline_commit": "2f5f02b5d06d752bcc3810dd47ca12e469495e45",
+  "web_url": "https://33764578423842b8a0268b9842908784.app.codebuddy.work",
+  "route": {
+    "file": "data/route_master_v1.json",
+    "version": "1.0",
+    "node_count": 48,
+    "total_km": 21423,
+    "last_node": "广州",
+    "closure": { "from": "广州", "to": "深圳", "km": 140 },
+    "distance_ratio": "1:10"
+  },
+  "app": {
+    "version": "1.0.1",
+    "android_package": "com.e23running.app",
+    "android_version_name": "1.0.1",
+    "android_version_code": 2,
+    "user_storage_key": "vr_china_user_v1"
+  },
+  "auth": {
+    "mode": "test_mock",
+    "sms": "mock_fixed_123456",
+    "wechat": "mock_with_warning",
+    "real_sms_connected": false,
+    "real_wechat_sdk_connected": false
+  },
+  "validation": {
+    "typescript": "passed_2026-07-14",
+    "vite_build": "passed_2026-07-14_with_css_warnings",
+    "android_build": "not_verified_locally",
+    "apk": "not_verified_in_current_baseline",
+    "device_visual_acceptance": "not_done"
+  },
+  "known_risks": [
+    "Android package-name change prevents automatic inheritance of old app WebView local data.",
+    "The working tree must be checked live before any commit; do not reuse historical file counts.",
+    "The current launcher icon resources require adaptive-icon and APK verification before release."
+  ]
+}
