@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import E23BrandMark from '../../components/E23BrandMark';
+import PreviewNotice from '../../components/PreviewNotice';
 import { BRAND } from '../../config/brand';
 
 export default function Splash({ onFinish }: { onFinish: () => void }) {
@@ -18,6 +19,7 @@ export default function Splash({ onFinish }: { onFinish: () => void }) {
         <h1 className="splash-title">{BRAND.APP_NAME}</h1>
         <p className="splash-subtitle">{BRAND.SPLASH.main}</p>
         <p className="splash-version">{BRAND.SPLASH.bottom}</p>
+        <PreviewNotice compact />
       </div>
     </div>
   );

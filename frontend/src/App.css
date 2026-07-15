@@ -4731,3 +4731,34 @@
 .lazy-panel i { width: 24px; height: 24px; border: 3px solid #e5e8ec; border-top-color: var(--e23-primary); border-radius: 50%; animation: e23-spin .8s linear infinite; }
 @keyframes e23-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .lazy-panel i { animation: none; border-top-color: #e5e8ec; } }
+
+/* V2 preview builds only. V1 renders no element and retains its existing layout. */
+.preview-notice {
+  box-sizing: border-box;
+  width: min(100%, 520px);
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 9px 12px;
+  overflow-wrap: anywhere;
+  color: #71420b;
+  border: 1px solid #f1c88f;
+  border-radius: 12px;
+  background: #fff7e9;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+.preview-notice.compact { padding: 6px 10px; font-size: 11px; }
+.app-mobile > .preview-notice {
+  position: fixed;
+  z-index: 40;
+  top: calc(7px + var(--sat));
+  left: 50%;
+  width: calc(100% - 24px);
+  transform: translateX(-50%);
+  box-shadow: 0 4px 14px rgba(24, 33, 43, .12);
+}
+.app-mobile > .preview-notice + .app-main-mobile {
+  padding-top: calc(42px + var(--sat));
+}

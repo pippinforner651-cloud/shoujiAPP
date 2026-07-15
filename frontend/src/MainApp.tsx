@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import CityBottomSheet from './components/CityBottomSheet';
 import E23Icon from './components/E23Icon';
+import PreviewNotice from './components/PreviewNotice';
 import { useAchievementStore } from './store/achievementStore';
 import { useCityStore } from './store/cityStore';
 import { subscribeProgress, useProgressStore } from './store/progressStore';
@@ -61,6 +62,7 @@ export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
 
   return (
     <div className="app app-mobile">
+      <PreviewNotice compact />
       <main className="app-main-mobile">
         {activeTab === 'home' && (
           <div className="tab-page tab-scroll journey-home">

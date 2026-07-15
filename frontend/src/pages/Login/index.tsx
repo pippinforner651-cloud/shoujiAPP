@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import E23BrandMark from '../../components/E23BrandMark';
 import E23Icon from '../../components/E23Icon';
+import PreviewNotice from '../../components/PreviewNotice';
 import { BRAND } from '../../config/brand';
 import { useUserStore } from '../../store/userStore';
 import { validatePhone } from '../../utils/authCore';
@@ -44,6 +45,8 @@ export default function Login({ onGoToRegister, onLoginSuccess }: Props) {
           <h1 className="login-title">{BRAND.APP_NAME}</h1>
           <p className="login-subtitle">每一步，都在环游中国</p>
         </header>
+
+        <PreviewNotice />
 
         <TestModeNotice />
 
