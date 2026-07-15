@@ -4,95 +4,168 @@ on:
   workflow_dispatch:
     inputs:
       api_base_url:
-        description: 'API Base URL (e.g. https://chinarun-api.onrender.com)'
+        description: 'V1 API Base URL; ignored by V2 preview builds'
+        required: false
+        default: ''
+        type: string
+      build_variant:
+        description: 'Build variant'
+        required: true
+        default: 'v1'
+        type: choice
+        options:
+          - v1
+          - v2-preview
+      artifact_name:
+        description: 'Optional artifact display name'
+        required: false
+        default: ''
+        type: string
+      app_version_label:
+        description: 'Optional in-app version label'
         required: false
         default: ''
         type: string
   push:
-    branches: [main, master, release]
+    branches: [main, master, release, codex/e23-v2-baseline]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build ${{ github.event.inputs.build_variant || 'branch default' }} APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout current branch
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve safe build configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          REQUESTED_VARIANT="${{ github.event.inputs.build_variant || 'v1' }}"
+
+          if [[ "$GITHUB_REF_NAME" == "codex/e23-v2-baseline" ]]; then
+            BUILD_VARIANT="v2-preview"
+          else
+            BUILD_VARIANT="$REQUESTED_VARIANT"
+          fi
+
+          if [[ "$BUILD_VARIANT" == "v2-preview" && "$GITHUB_REF_NAME" != "codex/e23-v2-baseline" ]]; then
+            echo "V2 preview APKs may only be built from codex/e23-v2-baseline"
+            exit 1
+          fi
+
+          if [[ "$BUILD_VARIANT" == "v2-preview" ]]; then
+            ARTIFACT_NAME="${{ github.event.inputs.artifact_name }}"
+            VERSION_LABEL="${{ github.event.inputs.app_version_label }}"
+            echo "VITE_BUILD_VARIANT=v2-preview" >> "$GITHUB_ENV"
+            echo "VITE_APP_VERSION_LABEL=${VERSION_LABEL:-V2 预览测试版}" >> "$GITHUB_ENV"
+            echo "VITE_MULTIPLAYER_MODE=disabled" >> "$GITHUB_ENV"
+            echo "VITE_E23_EVENT_ID=" >> "$GITHUB_ENV"
+            echo "VITE_API_BASE_URL=" >> "$GITHUB_ENV"
+            echo "APK_FILE=E23跑起来_V2预览测试版.apk" >> "$GITHUB_ENV"
+            echo "ARTIFACT_NAME=${ARTIFACT_NAME:-E23跑起来_V2预览测试版}" >> "$GITHUB_ENV"
+            echo "GRADLE_PREVIEW_ARG=-Pe23Preview=true" >> "$GITHUB_ENV"
+          else
+            API_URL="${{ github.event.inputs.api_base_url || vars.VITE_API_BASE_URL || 'https://chinarun-api.onrender.com' }}"
+            ARTIFACT_NAME="${{ github.event.inputs.artifact_name }}"
+            VERSION_LABEL="${{ github.event.inputs.app_version_label }}"
+            echo "VITE_BUILD_VARIANT=v1" >> "$GITHUB_ENV"
+            echo "VITE_APP_VERSION_LABEL=${VERSION_LABEL:-V1.0.1}" >> "$GITHUB_ENV"
+            echo "VITE_MULTIPLAYER_MODE=v1-backend" >> "$GITHUB_ENV"
+            echo "VITE_API_BASE_URL=$API_URL" >> "$GITHUB_ENV"
+            echo "APK_FILE=E23跑起来_V1.0.1_安卓测试版.apk" >> "$GITHUB_ENV"
+            echo "ARTIFACT_NAME=${ARTIFACT_NAME:-E23跑起来_V1.0.1_安卓测试版}" >> "$GITHUB_ENV"
+            echo "GRADLE_PREVIEW_ARG=" >> "$GITHUB_ENV"
+          fi
+
+          echo "BUILD_VARIANT=$BUILD_VARIANT" >> "$GITHUB_ENV"
+
+      - name: Enforce V2 preview safety gates
+        if: env.BUILD_VARIANT == 'v2-preview'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/pr-safety-check.mjs origin/main HEAD
+          node -e "const p=require('./data/route_packages/e23-china-loop-v2.draft.json'); if(p.status!=='DRAFT'||p.nodes.length!==0||p.segments.length!==0){throw new Error('V2 route must remain an incomplete DRAFT')}"
+          if find backend/prisma/migrations -type f -name migration.sql -print -quit 2>/dev/null | grep -q .; then
+            echo "Unapproved Prisma migration SQL found"
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'microsoft'
+          distribution: microsoft
           java-version: '21'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Set API Base URL
-        run: |
-          API_URL="${{ inputs.api_base_url || vars.VITE_API_BASE_URL || 'https://chinarun-api.onrender.com' }}"
-          echo "VITE_API_BASE_URL=$API_URL" >> "$GITHUB_ENV"
-          echo "Using API: $API_URL"
-
-      - name: Install Dependencies
+      - name: Install frontend dependencies
         working-directory: frontend
-        run: |
-          npm install
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+        run: npm ci
 
-      - name: Build Frontend
+      - name: TypeScript check
         working-directory: frontend
-        run: npm run build
+        run: npm run typecheck
 
-      - name: Sync Capacitor
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Vite production build
+        working-directory: frontend
+        run: npm run build:vite
+
+      - name: Sync Capacitor Android project
         working-directory: frontend
         run: npx cap sync android
 
-      - name: Build Debug APK
+      - name: Build debug APK
         working-directory: frontend/android
+        shell: bash
         run: |
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          set -euo pipefail
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon $GRADLE_PREVIEW_ARG
 
-      - name: Verify Debug APK Signature
+      - name: Verify signature and calculate SHA256
+        shell: bash
         run: |
+          set -euo pipefail
           DEBUG_APK="frontend/android/app/build/outputs/apk/debug/app-debug.apk"
-
-          if [ ! -f "$DEBUG_APK" ]; then
-            echo "Debug APK not found"
-            exit 1
-          fi
-
-          echo "Debug APK exists"
-          ls -lh "$DEBUG_APK"
-          sha256sum "$DEBUG_APK"
-
+          test -f "$DEBUG_APK"
           APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-
-          if [ -z "$APKSIGNER" ]; then
-            echo "apksigner not found"
-            exit 1
-          fi
-
-          echo "Using apksigner: $APKSIGNER"
+          test -n "$APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs "$DEBUG_APK"
+          cp "$DEBUG_APK" "$APK_FILE"
+          sha256sum "$APK_FILE" | tee "$APK_FILE.sha256"
+          ls -lh "$APK_FILE" "$APK_FILE.sha256"
 
-      - name: Rename Debug APK for Delivery
-        run: |
-          cp frontend/android/app/build/outputs/apk/debug/app-debug.apk \
-             E23跑起来_V1.0.1_安卓测试版.apk
-          echo "SHA256=$(sha256sum E23跑起来_V1.0.1_安卓测试版.apk | cut -d' ' -f1)"
-
-      - name: Upload Debug APK Artifact
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: E23跑起来_V1.0.1_安卓测试版
-          path: E23跑起来_V1.0.1_安卓测试版.apk
+          name: ${{ env.ARTIFACT_NAME }}
+          path: |
+            ${{ env.APK_FILE }}
+            ${{ env.APK_FILE }}.sha256
           retention-days: 30
+          if-no-files-found: error
