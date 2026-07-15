@@ -1,5 +1,7 @@
--- REVIEW ONLY: do not deploy until the user approves the production migration window.
--- This migration is additive and does not activate the E23 V2 route.
+-- DESIGN REVIEW ONLY. NOT APPROVED. NOT EXECUTED.
+-- NOT PART OF THE PRISMA MIGRATION CHAIN.
+-- After an isolated test-database rehearsal and explicit user approval, generate a new formal migration.
+-- This SQL draft is additive and does not activate the E23 V2 route.
 
 CREATE TABLE "communities" (
     "id" TEXT NOT NULL,
