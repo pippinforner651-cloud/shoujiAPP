@@ -6,7 +6,7 @@ export function assertRouteReadyForPublish(route: RoutePackageV2): void {
   if (!validation.valid) {
     throw new Error(`route validation failed: ${validation.issues.map((issue) => issue.code).join(',')}`);
   }
-  if (route.status !== 'VERIFIED' && route.status !== 'PUBLISHED') {
+  if (route.status !== 'VERIFIED' && route.status !== 'PUBLISHED' && route.status !== 'ACTIVE') {
     throw new Error('route is not verified');
   }
 }

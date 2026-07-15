@@ -1,7 +1,7 @@
 export const V2_ROUTE_SCHEMA_VERSION = '2.0' as const;
 export const V2_DISTANCE_POLICY = 'REAL_1_TO_1' as const;
 
-export type RoutePackageStatus = 'DRAFT' | 'VERIFIED' | 'PUBLISHED' | 'ARCHIVED';
+export type RoutePackageStatus = 'DRAFT' | 'VERIFIED' | 'PUBLISHED' | 'ACTIVE' | 'ARCHIVED';
 export type RouteScope = 'CHINA' | 'WORLD' | 'CUSTOM';
 export type DistancePolicy = typeof V2_DISTANCE_POLICY | 'LEGACY_SCALED';
 

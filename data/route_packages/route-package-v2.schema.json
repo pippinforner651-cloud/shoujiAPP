@@ -22,7 +22,7 @@
     "schemaVersion": { "const": "2.0" },
     "id": { "type": "string", "minLength": 1 },
     "version": { "type": "string", "minLength": 1 },
-    "status": { "enum": ["DRAFT", "VERIFIED", "PUBLISHED", "ARCHIVED"] },
+    "status": { "enum": ["DRAFT", "VERIFIED", "PUBLISHED", "ACTIVE", "ARCHIVED"] },
     "scope": { "enum": ["CHINA", "WORLD", "CUSTOM"] },
     "distancePolicy": { "const": "REAL_1_TO_1" },
     "declaredDistanceMeters": { "type": "integer", "minimum": 27000000 },
@@ -30,10 +30,12 @@
     "endPlace": { "$ref": "#/$defs/place" },
     "nodes": {
       "type": "array",
+      "minItems": 3,
       "items": { "$ref": "#/$defs/node" }
     },
     "segments": {
       "type": "array",
+      "minItems": 3,
       "items": { "$ref": "#/$defs/segment" }
     },
     "provenance": { "$ref": "#/$defs/provenance" },
@@ -83,6 +85,7 @@
             "type": { "const": "LineString" },
             "coordinates": {
               "type": "array",
+              "minItems": 2,
               "items": {
                 "type": "array",
                 "prefixItems": [
