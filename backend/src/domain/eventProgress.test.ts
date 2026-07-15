@@ -4,10 +4,10 @@ import test from 'node:test';
 import { buildEventProgress, buildEventRanking } from './eventProgress.js';
 
 const rows = [
-  { userId: 'u1', nickname: '甲', avatarUrl: 'a.png', memberStatus: 'APPROVED', contributionStatus: 'ACCEPTED', acceptedDistanceMeters: 5_000 },
-  { userId: 'u2', nickname: '乙', avatarUrl: 'b.png', memberStatus: 'APPROVED', contributionStatus: 'ACCEPTED', acceptedDistanceMeters: 3_200 },
-  { userId: 'u1', nickname: '甲', avatarUrl: 'a.png', memberStatus: 'APPROVED', contributionStatus: 'PENDING', acceptedDistanceMeters: 8_000 },
-  { userId: 'u3', nickname: '丙', avatarUrl: 'c.png', memberStatus: 'PENDING', contributionStatus: 'ACCEPTED', acceptedDistanceMeters: 10_000 },
+  { activityOwnerUserId: 'u1', contributionUserId: 'attacker', nickname: '甲', avatarUrl: 'a.png', memberStatus: 'APPROVED', contributionStatus: 'ACCEPTED', acceptedDistanceMeters: 5_000 },
+  { activityOwnerUserId: 'u2', nickname: '乙', avatarUrl: 'b.png', memberStatus: 'APPROVED', contributionStatus: 'ACCEPTED', acceptedDistanceMeters: 3_200 },
+  { activityOwnerUserId: 'u1', nickname: '甲', avatarUrl: 'a.png', memberStatus: 'APPROVED', contributionStatus: 'PENDING', acceptedDistanceMeters: 8_000 },
+  { activityOwnerUserId: 'u3', nickname: '丙', avatarUrl: 'c.png', memberStatus: 'PENDING', contributionStatus: 'ACCEPTED', acceptedDistanceMeters: 10_000 },
 ] as const;
 
 test('builds exact one-to-one class progress from approved accepted rows only', () => {
@@ -24,6 +24,10 @@ test('builds a real member ranking without pending rows', () => {
     [1, 'u1', 5_000],
     [2, 'u2', 3_200],
   ]);
+});
+
+test('attributes ranking to the Activity owner instead of a contribution user field', () => {
+  assert.equal(buildEventRanking(rows)[0].userId, 'u1');
 });
 
 test('clamps route position and preserves over-target contribution', () => {

@@ -10,8 +10,8 @@ const repository: EventReadRepository = {
   },
   async listContributionRows() {
     return [
-      { userId: 'u1', nickname: '甲', avatarUrl: 'a.png', memberStatus: 'APPROVED', contributionStatus: 'ACCEPTED', acceptedDistanceMeters: 5_000 },
-      { userId: 'u2', nickname: '乙', avatarUrl: 'b.png', memberStatus: 'APPROVED', contributionStatus: 'ACCEPTED', acceptedDistanceMeters: 3_200 },
+      { activityOwnerUserId: 'u1', nickname: '甲', avatarUrl: 'a.png', memberStatus: 'APPROVED', contributionStatus: 'ACCEPTED', acceptedDistanceMeters: 5_000 },
+      { activityOwnerUserId: 'u2', nickname: '乙', avatarUrl: 'b.png', memberStatus: 'APPROVED', contributionStatus: 'ACCEPTED', acceptedDistanceMeters: 3_200 },
     ];
   },
 };

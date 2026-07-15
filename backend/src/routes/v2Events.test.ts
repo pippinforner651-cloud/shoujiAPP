@@ -12,6 +12,9 @@ const service = {
   async getRanking(eventId: string) {
     return { event_id: eventId, ranking: [{ rank: 1, user_id: 'u1', nickname: '甲', avatar_url: 'a.png', accepted_distance_meters: 5_000 }] };
   },
+  async createContribution(input: { eventId: string; activityId: string }) {
+    return { id: 'contribution-1', event_id: input.eventId, activity_id: input.activityId, user_id: 'activity-owner' };
+  },
 };
 
 test('serves the V2 event progress and ranking contracts', async () => {
@@ -23,6 +26,19 @@ test('serves the V2 event progress and ranking contracts', async () => {
   assert.equal(progress.json().accepted_distance_meters, 8_200);
   assert.equal(ranking.statusCode, 200);
   assert.equal(ranking.json().ranking[0].user_id, 'u1');
+  await app.close();
+});
+
+test('rejects a client-supplied contribution userId', async () => {
+  const app = Fastify({ logger: false });
+  app.register(createEventRoutesV2(service), { prefix: '/v2/events' });
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v2/events/e23-2026/contributions',
+    payload: { activity_id: 'activity-1', user_id: 'attacker' },
+  });
+  assert.equal(response.statusCode, 400);
+  assert.deepEqual(response.json(), { error: 'CLIENT_USER_ID_FORBIDDEN' });
   await app.close();
 });
 

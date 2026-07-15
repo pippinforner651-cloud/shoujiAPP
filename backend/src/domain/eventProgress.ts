@@ -1,5 +1,6 @@
 export interface EventContributionRow {
-  userId: string;
+  activityOwnerUserId: string;
+  contributionUserId?: string;
   nickname: string;
   avatarUrl: string | null;
   memberStatus: string;
@@ -34,9 +35,9 @@ function isCounted(row: EventContributionRow): boolean {
 export function buildEventRanking(rows: readonly EventContributionRow[]): EventRankingRow[] {
   const totals = new Map<string, Omit<EventRankingRow, 'rank'>>();
   rows.filter(isCounted).forEach((row) => {
-    const existing = totals.get(row.userId);
-    totals.set(row.userId, {
-      userId: row.userId,
+    const existing = totals.get(row.activityOwnerUserId);
+    totals.set(row.activityOwnerUserId, {
+      userId: row.activityOwnerUserId,
       nickname: row.nickname,
       avatarUrl: row.avatarUrl,
       acceptedDistanceMeters: (existing?.acceptedDistanceMeters ?? 0) + Math.round(row.acceptedDistanceMeters),
