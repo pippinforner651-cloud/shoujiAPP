@@ -18,4 +18,3 @@ export const BUILD_VARIANT = resolveBuildVariant(viteEnv?.VITE_BUILD_VARIANT);
 export const IS_V2_PREVIEW = BUILD_VARIANT === 'v2-preview';
 export const APP_VERSION_LABEL = viteEnv?.VITE_APP_VERSION_LABEL?.trim()
   || (IS_V2_PREVIEW ? 'V2 预览测试版' : 'V1.0.1');
-

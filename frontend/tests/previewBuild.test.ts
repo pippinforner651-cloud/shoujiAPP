@@ -58,4 +58,3 @@ test('preview banner styles cannot create narrow-screen horizontal overflow', ()
   assert.match(styles, /\.preview-notice[\s\S]*max-width:\s*100%/);
   assert.match(styles, /\.preview-notice[\s\S]*overflow-wrap:\s*anywhere/);
 });
-
