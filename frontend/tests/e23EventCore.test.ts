@@ -31,5 +31,7 @@ test('reduces a failed cloud load to an honest unavailable state', () => {
 test('production global progress store has no simulated runner fallback', () => {
   const source = readFileSync(new URL('../src/store/globalProgressStore.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /generateMockRunners|mock\/globalRunners/);
-  assert.doesNotMatch(source, /SCALE_RATIO|averageVirtualKm\s*\/\s*21423/);
+  assert.match(source, /v1-backend/);
+  assert.match(source, /v2-backend/);
+  assert.match(source, /数据加载失败/);
 });

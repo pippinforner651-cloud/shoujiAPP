@@ -9,7 +9,7 @@ function fmt(n: number): string {
 }
 
 export default function GlobalProgressCard() {
-  const { progress, initialized, initialize } = useGlobalStore();
+  const { progress, initialized, initialize, status, error } = useGlobalStore();
 
   useEffect(() => {
     initialize();
@@ -17,6 +17,9 @@ export default function GlobalProgressCard() {
 
   if (!initialized) {
     return <div className="global-card loading"><div className="global-loading">加载全民数据...</div></div>;
+  }
+  if (status === 'disabled' || status === 'error') {
+    return <div className="global-card unavailable"><div className="global-loading">{error}</div></div>;
   }
 
   // 数据校验

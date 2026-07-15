@@ -2,13 +2,16 @@ import { useEffect } from 'react';
 import { useGlobalStore } from '../../store/globalProgressStore';
 
 export default function GlobalRanking() {
-  const { progress, initialized, initialize } = useGlobalStore();
+  const { progress, initialized, initialize, status, error } = useGlobalStore();
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
   if (!initialized) return null;
+  if (status === 'disabled' || status === 'error') {
+    return <div className="global-ranking"><div className="global-loading">{error}</div></div>;
+  }
 
   const runners = progress.allRunners;
 

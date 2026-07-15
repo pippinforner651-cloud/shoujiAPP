@@ -6,7 +6,7 @@ export default function GlobalShareCard() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { progress, initialized, initialize } = useGlobalStore();
+  const { progress, initialized, initialize, status, error } = useGlobalStore();
 
   // 确保已初始化
   if (!initialized) {
@@ -14,7 +14,7 @@ export default function GlobalShareCard() {
   }
 
   const handleShare = async () => {
-    if (!initialized) return;
+    if (!initialized || status !== 'ready') return;
     setLoading(true);
     try {
       const topRunner = progress.allRunners[0];
@@ -37,8 +37,8 @@ export default function GlobalShareCard() {
 
   return (
     <div className="share-card-wrap">
-      <button className="share-btn global-share-btn" onClick={handleShare} disabled={loading}>
-        {loading ? '⏳ 生成中...' : '📤 分享全民进度'}
+      <button className="share-btn global-share-btn" onClick={handleShare} disabled={loading || status !== 'ready'}>
+        {loading ? '⏳ 生成中...' : status === 'ready' ? '📤 分享全民进度' : (error ?? '多人服务暂未启用')}
       </button>
 
       {previewUrl && (
