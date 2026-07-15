@@ -13,9 +13,9 @@ export function leaderboardRoutes(app: FastifyInstance, _opts: unknown, done: ()
       // SQL SUM 实时计算
       const ranking = await prisma.activity.groupBy({
         by: ['userId'],
-        _sum: { distanceKm: true },
+        _sum: { distanceMeters: true },
         _count: true,
-        orderBy: { _sum: { distanceKm: 'desc' } },
+        orderBy: { _sum: { distanceMeters: 'desc' } },
         take,
         skip,
       });
@@ -35,7 +35,7 @@ export function leaderboardRoutes(app: FastifyInstance, _opts: unknown, done: ()
         nickname: userMap.get(r.userId)?.nickname || '跑者',
         avatar: userMap.get(r.userId)?.avatar || 'default',
         level: userMap.get(r.userId)?.level || 1,
-        total_distance_km: Math.round((r._sum.distanceKm || 0) * 100) / 100,
+        total_distance_km: Math.round(((r._sum.distanceMeters || 0) / 1000) * 100) / 100,
         run_count: r._count,
       }));
 
@@ -46,20 +46,20 @@ export function leaderboardRoutes(app: FastifyInstance, _opts: unknown, done: ()
         const idx = ranking.findIndex((r) => r.userId === user_id);
         const userStats = await prisma.activity.aggregate({
           where: { userId: user_id },
-          _sum: { distanceKm: true },
+          _sum: { distanceMeters: true },
         });
         userRank = {
           rank: idx >= 0 ? idx + 1 : totalParticipants.length + 1,
-          total_distance_km: Math.round((userStats._sum.distanceKm || 0) * 100) / 100,
+          total_distance_km: Math.round(((userStats._sum.distanceMeters || 0) / 1000) * 100) / 100,
         };
       }
 
-      const globalSum = await prisma.activity.aggregate({ _sum: { distanceKm: true } });
+      const globalSum = await prisma.activity.aggregate({ _sum: { distanceMeters: true } });
 
       return reply.send({
         leaderboard,
         total_participants: totalParticipants.length,
-        global_total_km: Math.round((globalSum._sum.distanceKm || 0) * 100) / 100,
+        global_total_km: Math.round(((globalSum._sum.distanceMeters || 0) / 1000) * 100) / 100,
         user_rank: userRank,
       });
     }
@@ -83,9 +83,9 @@ export function leaderboardRoutes(app: FastifyInstance, _opts: unknown, done: ()
       const stats = await prisma.activity.groupBy({
         by: ['userId'],
         where: { userId: { in: friendIds } },
-        _sum: { distanceKm: true },
+        _sum: { distanceMeters: true },
         _count: true,
-        orderBy: { _sum: { distanceKm: 'desc' } },
+        orderBy: { _sum: { distanceMeters: 'desc' } },
         take: limit,
       });
 
@@ -101,7 +101,7 @@ export function leaderboardRoutes(app: FastifyInstance, _opts: unknown, done: ()
         nickname: userMap.get(s.userId)?.nickname || '跑者',
         avatar: userMap.get(s.userId)?.avatar || 'default',
         level: userMap.get(s.userId)?.level || 1,
-        total_distance_km: Math.round((s._sum.distanceKm || 0) * 100) / 100,
+        total_distance_km: Math.round(((s._sum.distanceMeters || 0) / 1000) * 100) / 100,
         run_count: s._count,
       }));
 

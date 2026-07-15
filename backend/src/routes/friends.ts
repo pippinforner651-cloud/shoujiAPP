@@ -83,7 +83,7 @@ export function friendRoutes(app: FastifyInstance, _opts: unknown, done: () => v
       const stats = await prisma.activity.groupBy({
         by: ['userId'],
         where: { userId: { in: friendIds } },
-        _sum: { distanceKm: true },
+        _sum: { distanceMeters: true },
         _count: true,
       });
       const statsMap = new Map(stats.map((s) => [s.userId, s]));
@@ -94,7 +94,7 @@ export function friendRoutes(app: FastifyInstance, _opts: unknown, done: () => v
         avatar: f.avatar,
         avatar_url: f.avatarUrl,
         level: f.level,
-        total_distance_km: Math.round((statsMap.get(f.id)?._sum.distanceKm || 0) * 100) / 100,
+        total_distance_km: Math.round(((statsMap.get(f.id)?._sum.distanceMeters || 0) / 1000) * 100) / 100,
         run_count: statsMap.get(f.id)?._count || 0,
       }));
 
