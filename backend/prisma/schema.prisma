@@ -44,6 +44,8 @@ model User {
   // 关联
   profile         UserProfile?
   activities      Activity[]
+  communityMemberships CommunityMember[]
+  activityContributions ActivityContribution[]
   userAchievements UserAchievement[]
   cityUnlocks     CityUnlock[]
   syncLogs        SyncLog[]
@@ -150,6 +152,81 @@ model GroupMember {
   @@map("group_members")
 }
 
+model Community {
+  id        String   @id
+  name      String
+  slug      String   @unique
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  members CommunityMember[]
+  events  RelayEvent[]
+
+  @@map("communities")
+}
+
+model CommunityMember {
+  id          String    @id
+  communityId String    @map("community_id")
+  userId      String    @map("user_id")
+  role        String    @default("MEMBER")
+  status      String    @default("PENDING")
+  reviewedBy  String?   @map("reviewed_by")
+  reviewedAt  DateTime? @map("reviewed_at")
+  joinedAt    DateTime? @map("joined_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  community Community @relation(fields: [communityId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@unique([communityId, userId])
+  @@index([communityId, status])
+  @@map("community_members")
+}
+
+model RoutePackage {
+  id                     String    @id
+  routeKey               String    @map("route_key")
+  version                String
+  name                   String
+  scope                  String
+  status                 String    @default("DRAFT")
+  distancePolicy         String    @map("distance_policy")
+  declaredDistanceMeters Int       @map("declared_distance_meters")
+  startPlace             Json      @map("start_place")
+  endPlace               Json      @map("end_place")
+  packageData            Json?     @map("package_data")
+  contentHash            String    @unique @map("content_hash")
+  schemaVersion          String    @map("schema_version")
+  publishedAt            DateTime? @map("published_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+
+  events RelayEvent[]
+
+  @@unique([routeKey, version])
+  @@index([status])
+  @@map("route_packages")
+}
+
+model RelayEvent {
+  id                String    @id
+  communityId       String    @map("community_id")
+  routePackageId    String    @map("route_package_id")
+  name              String
+  status            String    @default("DRAFT")
+  startsAt          DateTime? @map("starts_at")
+  endsAt            DateTime? @map("ends_at")
+  manualEntryPolicy String    @default("REVIEW_REQUIRED") @map("manual_entry_policy")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  community    Community             @relation(fields: [communityId], references: [id])
+  routePackage RoutePackage          @relation(fields: [routePackageId], references: [id])
+  contributions ActivityContribution[]
+
+  @@index([communityId, status])
+  @@map("relay_events")
+}
+
 model UserEvent {
   id        Int      @id @default(autoincrement())
   userId    String   @map("user_id")
@@ -216,11 +293,36 @@ model Activity {
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user          User                   @relation(fields: [userId], references: [id])
+  contributions ActivityContribution[]
   @@index([userId, startTime(sort: Desc)])
   @@index([sourceActivityId])
   @@index([rawDataHash])
+  @@unique([userId, source, sourceActivityId])
   @@map("activities")
+}
+
+model ActivityContribution {
+  id                     String   @id
+  eventId                String   @map("event_id")
+  activityId             String   @map("activity_id")
+  userId                 String   @map("user_id")
+  acceptedDistanceMeters Int      @default(0) @map("accepted_distance_meters")
+  status                 String   @default("PENDING")
+  decisionReason         String?  @map("decision_reason")
+  reviewedBy             String?  @map("reviewed_by")
+  reviewedAt             DateTime? @map("reviewed_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  event    RelayEvent @relation(fields: [eventId], references: [id])
+  activity Activity   @relation(fields: [activityId], references: [id])
+  user     User       @relation(fields: [userId], references: [id])
+
+  @@unique([eventId, activityId])
+  @@index([eventId, status])
+  @@index([eventId, userId, status])
+  @@map("activity_contributions")
 }
 
 model Achievement {
