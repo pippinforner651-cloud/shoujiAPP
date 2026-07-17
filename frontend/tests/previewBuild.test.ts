@@ -91,6 +91,7 @@ test('Android startup exposes non-sensitive readiness markers', () => {
 test('APK upload follows five emulator cold starts and resilience checks', () => {
   const workflow = read('../../.github/workflows/build-apk.yml');
   const smoke = read('../../scripts/android/emulator-smoke.sh');
+  assert.match(workflow, /runs-on:\s*ubuntu-22\.04/);
   assert.match(workflow, /android-emulator-runner/);
   assert.ok(workflow.indexOf('android-emulator-runner') < workflow.indexOf('Upload debug APK artifact'));
   assert.match(workflow, /api-level:\s*35/);

@@ -39,7 +39,7 @@ concurrency:
 jobs:
   build:
     name: Build ${{ github.event.inputs.build_variant || 'branch default' }} APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout current branch
