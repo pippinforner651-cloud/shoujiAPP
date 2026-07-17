@@ -93,6 +93,8 @@ test('APK upload follows five emulator cold starts and resilience checks', () =>
   const smoke = read('../../scripts/android/emulator-smoke.sh');
   assert.match(workflow, /android-emulator-runner/);
   assert.ok(workflow.indexOf('android-emulator-runner') < workflow.indexOf('Upload debug APK artifact'));
+  assert.match(workflow, /api-level:\s*34/);
+  assert.match(workflow, /disable-animations:\s*false/);
   assert.match(smoke, /seq 1 5/);
   assert.match(smoke, /am force-stop/);
   assert.match(smoke, /am start -W/);
