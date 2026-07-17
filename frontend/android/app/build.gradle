@@ -11,7 +11,10 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode e23Preview ? 20003 : 2
         versionName e23Preview ? "2.0.0-preview.3" : "1.0.1"
-        manifestPlaceholders = [appLabel: e23Preview ? "E23跑起来预览版" : "E23跑起来"]
+        manifestPlaceholders = [
+            appLabel: e23Preview ? "E23跑起来预览版" : "E23跑起来",
+            hardwareAccelerated: e23Preview ? "false" : "true"
+        ]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -53,7 +53,9 @@ test('Android preview build is isolated from the V1 package', () => {
   assert.match(gradle, /com\.e23running\.app\.preview/);
   assert.match(gradle, /versionCode e23Preview \? 20003 : 2/);
   assert.match(gradle, /2\.0\.0-preview\.3/);
+  assert.match(gradle, /hardwareAccelerated:\s*e23Preview \? "false" : "true"/);
   assert.match(manifest, /\$\{appLabel\}/);
+  assert.match(manifest, /android:hardwareAccelerated="\$\{hardwareAccelerated\}"/);
   assert.match(manifest, /android:name="com\.e23running\.app\.MainActivity"/);
   assert.match(activity, /package com\.e23running\.app;/);
 });
