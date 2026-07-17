@@ -9,7 +9,7 @@ import ProfilePage from './pages/ProfilePage';
 type Tab = 'map' | 'run' | 'rank' | 'me';
 
 export default function App() {
-  useSyncExternalStore((f) => store.subscribe(f), () => store);
+  useSyncExternalStore((f) => store.subscribe(f), () => store.version);
   const [tab, setTab] = useState<Tab>('map');
 
   if (!store.user) {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { store, fmtPace, fmtDuration } from '../lib/store';
 
-type Phase = 'idle' | 'running' | 'paused' | 'done';
+type Phase = 'idle' | 'running' | 'paused' | 'done' | 'manual';
 
 function haversine(a: [number, number], b: [number, number]) {
   const R = 6371000, rad = Math.PI / 180;
@@ -17,6 +17,11 @@ export default function RunPage() {
   const [meters, setMeters] = useState(0);
   const [curPace, setCurPace] = useState(0); // 秒/km
   const [gpsOK, setGpsOK] = useState<boolean | null>(null);
+  const [gpsMsg, setGpsMsg] = useState('');
+  // 手动补录表单
+  const [mDate, setMDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [mKm, setMKm] = useState('');
+  const [mMin, setMMin] = useState('');
 
   const lastFix = useRef<{ coord: [number, number]; t: number } | null>(null);
   const trail = useRef<Array<{ t: number; m: number }>>([]);
@@ -47,6 +52,7 @@ export default function RunPage() {
     watchId.current = navigator.geolocation.watchPosition(
       (p) => {
         setGpsOK(true);
+        setGpsMsg('');
         if (p.coords.accuracy > 40) return; // 过滤漂移
         const fix: [number, number] = [p.coords.longitude, p.coords.latitude];
         const now = Date.now();
@@ -62,7 +68,14 @@ export default function RunPage() {
         }
         lastFix.current = { coord: fix, t: now };
       },
-      () => { setGpsOK(false); setMode('sim'); },
+      (err) => {
+        // 权限被拒绝/不可用时给出明确提示，不静默降级
+        setGpsOK(false);
+        setGpsMsg(err.code === 1
+          ? '定位权限被拒绝：请在浏览器/系统设置中允许定位后重试，或改用「室内/演示」模式'
+          : '暂时无法获取定位（信号弱或超时）：请检查GPS信号，或改用「室内/演示」模式');
+        setMode('sim');
+      },
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 8000 }
     );
     return () => { if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current); };
@@ -103,6 +116,45 @@ export default function RunPage() {
     setPhase('done');
   };
 
+  const saveManual = () => {
+    const km = parseFloat(mKm);
+    const min = parseFloat(mMin);
+    if (!km || km <= 0 || !min || min <= 0) return;
+    const ts = new Date(`${mDate}T12:00:00`).getTime();
+    store.addRecord({
+      id: `r${Date.now()}`, ts: isNaN(ts) ? Date.now() : ts,
+      km: Math.round(km * 100) / 100, durationSec: Math.round(min * 60),
+      avgPaceSec: Math.round((min * 60) / km), source: 'manual',
+    });
+    setMKm(''); setMMin('');
+    setPhase('done');
+  };
+
+  if (phase === 'manual') {
+    return (
+      <div className="h-full flex flex-col bg-slate-900 text-white px-8 pt-10">
+        <div className="text-xl font-bold mb-1">手动补录</div>
+        <div className="text-xs text-slate-400 mb-6">补记真实发生的跑步（跑步机、忘记开表等），1:1 计入环线</div>
+        <label className="text-xs text-slate-400 mb-1">日期</label>
+        <input type="date" value={mDate} onChange={(e) => setMDate(e.target.value)}
+          className="mb-4 px-4 py-3 rounded-xl bg-white/10 text-white outline-none" />
+        <label className="text-xs text-slate-400 mb-1">距离（公里）</label>
+        <input value={mKm} onChange={(e) => setMKm(e.target.value.replace(/[^\d.]/g, ''))} placeholder="如 5.2" inputMode="decimal"
+          className="mb-4 px-4 py-3 rounded-xl bg-white/10 text-white outline-none placeholder:text-slate-500" />
+        <label className="text-xs text-slate-400 mb-1">时长（分钟）</label>
+        <input value={mMin} onChange={(e) => setMMin(e.target.value.replace(/[^\d.]/g, ''))} placeholder="如 30" inputMode="decimal"
+          className="mb-2 px-4 py-3 rounded-xl bg-white/10 text-white outline-none placeholder:text-slate-500" />
+        {mKm && mMin && parseFloat(mKm) > 0 && (
+          <div className="text-xs text-slate-400 mb-4">平均配速约 {fmtPace((parseFloat(mMin) * 60) / parseFloat(mKm))}/km</div>
+        )}
+        <div className="flex gap-3 mt-4">
+          <button onClick={() => setPhase('idle')} className="flex-1 py-3.5 rounded-full bg-white/15 font-bold">取消</button>
+          <button onClick={saveManual} className="flex-1 py-3.5 rounded-full bg-orange-500 font-bold active:bg-orange-600">保存</button>
+        </div>
+      </div>
+    );
+  }
+
   if (phase === 'done') {
     return (
       <div className="h-full flex flex-col items-center justify-center bg-slate-900 text-white px-8">
@@ -129,15 +181,23 @@ export default function RunPage() {
           </div>
           <div className="text-slate-400 text-sm mb-1">准备好就跑起来，每一步都算数</div>
           <div className="text-xs text-slate-500 mb-8">实时显示配速 · 距离 · 时长，1:1 点亮中国地图</div>
-          <div className="flex gap-3 mb-8">
-            <ModeBtn active={mode === 'gps'} onClick={() => setMode('gps')} label="GPS 户外跑" sub={gpsOK === false ? '定位不可用' : '实时定位'} />
+          <div className="flex gap-3 mb-4">
+            <ModeBtn active={mode === 'gps'} onClick={() => setMode('gps')} label="GPS 户外跑" sub="前台实时定位" />
             <ModeBtn active={mode === 'sim'} onClick={() => setMode('sim')} label="室内/演示" sub="模拟配速" />
           </div>
+          {gpsMsg && (
+            <div className="w-full max-w-xs mb-4 text-xs leading-relaxed px-4 py-3 rounded-2xl bg-amber-500/15 text-amber-300 border border-amber-500/30">
+              ⚠️ {gpsMsg}
+            </div>
+          )}
           <button onClick={start} className="w-full max-w-xs py-4 rounded-full bg-orange-500 text-lg font-black tracking-widest active:bg-orange-600 shadow-lg shadow-orange-500/30">
             开始跑步
           </button>
+          <button onClick={() => setPhase('manual')} className="mt-3 text-sm text-slate-400 underline underline-offset-4">手动补录一次跑步</button>
         </div>
-        <div className="px-6 pb-6 text-center text-xs text-slate-600">数据来源：{mode === 'gps' ? '手机 GPS（浏览器定位）' : '模拟配速'} · 悦跑圈/手表同步接口已预留</div>
+        <div className="px-6 pb-6 text-center text-xs text-slate-600">
+          数据来源：{mode === 'gps' ? '手机 GPS（仅前台，锁屏后台GPS未实现）' : '模拟配速'} · 心率/步频/海拔/手表同步尚未实现
+        </div>
       </div>
     );
   }
