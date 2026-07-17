@@ -6,6 +6,7 @@ interface Props {
   pack: MapPack;
   progressKm: number;         // 累计（1:1 真实公里）
   onSelectNode?: (n: RouteNode) => void;
+  onRunnerClick?: () => void; // 点击跑动小人
   selectedNode?: RouteNode | null;
 }
 
@@ -13,7 +14,7 @@ const LAT0 = 35;
 const BLUE = '#3B82F6';   // 未跑路段
 const ORANGE = '#FF6B1A'; // 已跑路段
 
-export default function ChinaMap({ pack, progressKm, onSelectNode, selectedNode }: Props) {
+export default function ChinaMap({ pack, progressKm, onSelectNode, onRunnerClick, selectedNode }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 1000, h: 800 });
   const baseBox = useRef({ x: 0, y: 0, w: 1000, h: 800 });
@@ -134,6 +135,7 @@ export default function ChinaMap({ pack, progressKm, onSelectNode, selectedNode 
     const pt = toSvg(e.clientX, e.clientY);
     let best: (typeof routePts)[0] | null = null, bd = Infinity;
     for (const n of routePts) {
+      if (!n.name) continue; // 边界途经点不参与点击
       const d = (n.x - pt.x) ** 2 + (n.y - pt.y) ** 2;
       if (d < bd) { bd = d; best = n; }
     }
@@ -171,21 +173,27 @@ export default function ChinaMap({ pack, progressKm, onSelectNode, selectedNode 
         {/* 已跑路线（橙色覆盖） */}
         <polyline points={donePts} fill="none" stroke={ORANGE} strokeWidth={5 * u} strokeLinecap="round" strokeLinejoin="round" opacity={0.95} />
         <polyline points={donePts} fill="none" stroke="#FFD166" strokeWidth={1.8 * u} strokeLinecap="round" strokeLinejoin="round" opacity={0.9} />
-        {/* 站点 */}
-        {routePts.map((n) => (
+        {/* 站点（边界途经点不渲染圆点） */}
+        {routePts.filter((n) => n.name).map((n) => (
           <circle key={n.id} cx={n.x} cy={n.y} r={n.id === 0 ? 6 * u : 3 * u}
             fill={n.cumKm <= progressKm ? ORANGE : '#fff'} stroke={n.cumKm <= progressKm ? '#fff' : BLUE} strokeWidth={1.4 * u} />
         ))}
         {/* 起点标记 */}
         <text x={routePts[0].x} y={routePts[0].y - 10 * u} fontSize={12.5 * u} textAnchor="middle" fill="#0F766E" fontWeight="700">北大汇丰·起点</text>
-        {/* 当前位置：脉冲圈 + 跑动小人 */}
-        <circle cx={cur.x} cy={cur.y} r={10 * u} fill={ORANGE} opacity={0.25}>
-          <animate attributeName="r" values={`${7 * u};${18 * u};${7 * u}`} dur="1.6s" repeatCount="indefinite" />
+        {/* 当前位置：脉冲圈 + 白色底托 + 大号跑动小人（可点击） */}
+        <circle cx={cur.x} cy={cur.y} r={12 * u} fill={ORANGE} opacity={0.25}>
+          <animate attributeName="r" values={`${9 * u};${24 * u};${9 * u}`} dur="1.6s" repeatCount="indefinite" />
           <animate attributeName="opacity" values="0.35;0.05;0.35" dur="1.6s" repeatCount="indefinite" />
         </circle>
-        <g>
-          <animateTransform attributeName="transform" type="translate" values={`0 0; 0 ${-3 * u}; 0 0`} dur="0.5s" repeatCount="indefinite" />
-          <text x={cur.x} y={cur.y + 6 * u} fontSize={20 * u} textAnchor="middle">🏃</text>
+        <g
+          className="cursor-pointer"
+          onClick={(e) => { e.stopPropagation(); if (!moved.current && onRunnerClick) onRunnerClick(); }}
+        >
+          <circle cx={cur.x} cy={cur.y} r={16 * u} fill="#fff" opacity={0.9} stroke={ORANGE} strokeWidth={2 * u} />
+          <g>
+            <animateTransform attributeName="transform" type="translate" values={`0 0; 0 ${-4 * u}; 0 0`} dur="0.5s" repeatCount="indefinite" />
+            <text x={cur.x} y={cur.y + 10 * u} fontSize={30 * u} textAnchor="middle">🏃</text>
+          </g>
         </g>
         {/* 选中站点 */}
         {sel && (

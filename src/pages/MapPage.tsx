@@ -2,21 +2,23 @@ import { useMemo, useState, useSyncExternalStore } from 'react';
 import ChinaMap from '../components/ChinaMap';
 import { store } from '../lib/store';
 import { getActivePack } from '../lib/integrations';
-import { positionAt, type RouteNode } from '../data/route';
+import { positionAt, nextNamedNode, type RouteNode } from '../data/route';
 
 type View = 'team' | 'me';
 
 export default function MapPage() {
   useSyncExternalStore((f) => store.subscribe(f), () => store);
   const [selected, setSelected] = useState<RouteNode | null>(null);
+  const [posOpen, setPosOpen] = useState(false);
   const [view, setView] = useState<View>('team');
   const pack = useMemo(() => getActivePack(store.customPack), [store.customPack]);
 
   const total = view === 'team' ? store.teamTotalKm : store.myTotalKm;
   const pos = useMemo(() => positionAt(pack.totalKm > 0 ? total % pack.totalKm : 0), [total, pack.totalKm]);
+  const heading = useMemo(() => nextNamedNode(total), [total]);
   const pct = pack.totalKm > 0 ? Math.min(100, (total / pack.totalKm) * 100) : 0;
 
-  const showCurrent = () => setSelected(pos.segProgress > 0.5 ? pos.next : pos.node);
+  const showCurrent = () => { setSelected(null); setPosOpen(true); };
 
   return (
     <div className="flex flex-col h-full">
@@ -58,7 +60,7 @@ export default function MapPage() {
 
       {/* 地图 */}
       <div className="flex-1 relative bg-[#F4F8F6]">
-        <ChinaMap pack={pack} progressKm={total} onSelectNode={setSelected} selectedNode={selected} />
+        <ChinaMap pack={pack} progressKm={total} onSelectNode={(n) => { setPosOpen(false); setSelected(n); }} onRunnerClick={showCurrent} selectedNode={selected} />
         {/* 当前位置卡 */}
         <button
           onClick={showCurrent}
@@ -69,12 +71,64 @@ export default function MapPage() {
             <span className="text-xs text-slate-500">{view === 'team' ? '班级' : '我的'}当前位置（第 {Math.floor(total % pack.totalKm).toLocaleString()} km）</span>
           </div>
           <div className="mt-1 font-bold text-slate-800">
-            {pos.node.name} → {pos.next.name}
-            <span className="ml-2 text-xs font-normal text-slate-500">{pos.next.road}</span>
+            前往 {heading.node.name}
+            <span className="ml-2 text-xs font-normal text-slate-500">{pos.next.road} · 还有 {heading.distKm.toLocaleString('zh-CN', { maximumFractionDigits: 0 })} km</span>
           </div>
-          <div className="text-xs text-slate-500 mt-0.5">点击查看当前位置详情、名胜古迹与美食 →</div>
+          <div className="text-xs text-slate-500 mt-0.5">点击小人查看：在哪条路上、去往哪里、当地风物 →</div>
         </button>
       </div>
+
+      {/* 当前位置抽屉：在哪条路上 / 去往哪里 / 距下一城市 */}
+      {posOpen && (
+        <div className="absolute inset-x-0 bottom-0 z-20 bg-white rounded-t-3xl shadow-2xl max-h-[62%] overflow-y-auto">
+          <div className="sticky top-0 bg-white rounded-t-3xl px-5 pt-3 pb-2 border-b border-slate-100">
+            <div className="w-10 h-1 rounded-full bg-slate-300 mx-auto mb-3" />
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-xl font-black text-slate-800">🏃 {view === 'team' ? '班级' : '我'}跑到这里了</div>
+                <div className="text-xs text-slate-500 mt-0.5">环线第 {Math.floor(total % pack.totalKm).toLocaleString()} km · {pos.next.province || pos.node.province}</div>
+              </div>
+              <button onClick={() => setPosOpen(false)} className="w-8 h-8 rounded-full bg-slate-100 text-slate-500">✕</button>
+            </div>
+          </div>
+          <div className="px-5 py-4 space-y-3">
+            <div className="bg-orange-50 rounded-2xl p-4 space-y-2.5">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">🛣 当前所在道路</span>
+                <span className="font-bold text-slate-800">{pos.next.road}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">🚩 正在前往</span>
+                <span className="font-bold text-slate-800">{heading.node.name}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">📏 距下一城市</span>
+                <span className="font-bold text-orange-600">{heading.distKm.toLocaleString('zh-CN', { maximumFractionDigits: 1 })} km</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-white overflow-hidden">
+                <div className="h-full bg-orange-500 rounded-full" style={{ width: `${Math.min(100, 100 - (heading.distKm / Math.max(1, heading.node.segKm)) * 100)}%` }} />
+              </div>
+            </div>
+            <div className="text-sm font-bold text-slate-700">到了「{heading.node.name}」可以看到这些：</div>
+            <div>
+              <div className="text-xs text-slate-500 mb-1.5">🏔 名胜古迹</div>
+              <div className="flex flex-wrap gap-2">
+                {heading.node.spots.map((s) => (
+                  <span key={s} className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-sm">{s}</span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500 mb-1.5">🍜 美食推荐</div>
+              <div className="flex flex-wrap gap-2">
+                {heading.node.foods.map((s) => (
+                  <span key={s} className="px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 text-sm">{s}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 站点详情抽屉 */}
       {selected && (
