@@ -69,25 +69,33 @@ export default function ChinaMap({ pack, progressKm, onSelectNode, onRunnerClick
     setViewBox(bounds);
   }, [bounds]);
 
-  const toSvg = useCallback((cx: number, cy: number) => {
+  // SVG 使用默认 preserveAspectRatio(meet)，内容可能上下/左右留边，
+  // 所有 屏幕坐标→SVG坐标 换算都必须扣除留边，否则点击会整体偏移
+  const clientToSvg = useCallback((cx: number, cy: number, v = viewBox) => {
     const svg = svgRef.current!;
     const r = svg.getBoundingClientRect();
+    const scale = Math.min(r.width / v.w, r.height / v.h);
+    const offX = (r.width - v.w * scale) / 2;
+    const offY = (r.height - v.h * scale) / 2;
     return {
-      x: viewBox.x + ((cx - r.left) / r.width) * viewBox.w,
-      y: viewBox.y + ((cy - r.top) / r.height) * viewBox.h,
+      x: v.x + (cx - r.left - offX) / scale,
+      y: v.y + (cy - r.top - offY) / scale,
+      scale,
     };
   }, [viewBox]);
+
+  const toSvg = useCallback((cx: number, cy: number) => clientToSvg(cx, cy), [clientToSvg]);
 
   const applyZoom = useCallback((f: number, cx?: number, cy?: number) => {
     setViewBox((v) => {
       const c = cx !== undefined && cy !== undefined
-        ? (() => { const svg = svgRef.current!; const r = svg.getBoundingClientRect(); return { x: v.x + ((cx - r.left) / r.width) * v.w, y: v.y + ((cy - r.top) / r.height) * v.h }; })()
+        ? clientToSvg(cx, cy, v)
         : { x: v.x + v.w / 2, y: v.y + v.h / 2 };
       const w = Math.min(Math.max(v.w * f, baseBox.current.w / 6), baseBox.current.w * 1.2);
       const h = w * (baseBox.current.h / baseBox.current.w);
       return { x: c.x - (c.x - v.x) * (w / v.w), y: c.y - (c.y - v.y) * (h / v.h), w, h };
     });
-  }, []);
+  }, [clientToSvg]);
 
   // ---- 触控：单指拖动 / 两指捏合缩放 ----
   const onPointerDown = (e: React.PointerEvent) => {
@@ -117,12 +125,15 @@ export default function ChinaMap({ pack, progressKm, onSelectNode, onRunnerClick
       pinchDist.current = d;
       return;
     }
-    // 单指拖动
+    // 单指拖动（同样按留边比例换算）
     const dx = e.clientX - prevPt.x, dy = e.clientY - prevPt.y;
     if (Math.abs(dx) + Math.abs(dy) < 2) return;
     moved.current = true;
     const svg = svgRef.current!; const r = svg.getBoundingClientRect();
-    setViewBox((v) => ({ ...v, x: v.x - (dx / r.width) * v.w, y: v.y - (dy / r.height) * v.h }));
+    setViewBox((v) => {
+      const scale = Math.min(r.width / v.w, r.height / v.h);
+      return { ...v, x: v.x - dx / scale, y: v.y - dy / scale };
+    });
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
@@ -133,6 +144,10 @@ export default function ChinaMap({ pack, progressKm, onSelectNode, onRunnerClick
   const handleClick = (e: React.MouseEvent) => {
     if (moved.current) return;
     const pt = toSvg(e.clientX, e.clientY);
+    const u2 = viewBox.w / 1000;
+    // 指针捕获会把小人的点击重定向到svg：这里优先判定是否点在小人上
+    const dRunner = (cur.x - pt.x) ** 2 + (cur.y - pt.y) ** 2;
+    if (dRunner < (34 * u2) ** 2 && onRunnerClick) { onRunnerClick(); return; }
     let best: (typeof routePts)[0] | null = null, bd = Infinity;
     for (const n of routePts) {
       if (!n.name) continue; // 边界途经点不参与点击
@@ -175,24 +190,25 @@ export default function ChinaMap({ pack, progressKm, onSelectNode, onRunnerClick
         <polyline points={donePts} fill="none" stroke="#FFD166" strokeWidth={1.8 * u} strokeLinecap="round" strokeLinejoin="round" opacity={0.9} />
         {/* 站点（边界途经点不渲染圆点） */}
         {routePts.filter((n) => n.name).map((n) => (
-          <circle key={n.id} cx={n.x} cy={n.y} r={n.id === 0 ? 6 * u : 3 * u}
+          <circle key={n.id} data-node={n.name} cx={n.x} cy={n.y} r={n.id === 0 ? 6 * u : 3 * u}
             fill={n.cumKm <= progressKm ? ORANGE : '#fff'} stroke={n.cumKm <= progressKm ? '#fff' : BLUE} strokeWidth={1.4 * u} />
         ))}
         {/* 起点标记 */}
         <text x={routePts[0].x} y={routePts[0].y - 10 * u} fontSize={12.5 * u} textAnchor="middle" fill="#0F766E" fontWeight="700">北大汇丰·起点</text>
         {/* 当前位置：脉冲圈 + 白色底托 + 大号跑动小人（可点击） */}
-        <circle cx={cur.x} cy={cur.y} r={12 * u} fill={ORANGE} opacity={0.25}>
-          <animate attributeName="r" values={`${9 * u};${24 * u};${9 * u}`} dur="1.6s" repeatCount="indefinite" />
+        <circle cx={cur.x} cy={cur.y} r={16 * u} fill={ORANGE} opacity={0.25}>
+          <animate attributeName="r" values={`${12 * u};${30 * u};${12 * u}`} dur="1.6s" repeatCount="indefinite" />
           <animate attributeName="opacity" values="0.35;0.05;0.35" dur="1.6s" repeatCount="indefinite" />
         </circle>
         <g
+          data-testid="runner"
           className="cursor-pointer"
           onClick={(e) => { e.stopPropagation(); if (!moved.current && onRunnerClick) onRunnerClick(); }}
         >
-          <circle cx={cur.x} cy={cur.y} r={16 * u} fill="#fff" opacity={0.9} stroke={ORANGE} strokeWidth={2 * u} />
-          <g>
-            <animateTransform attributeName="transform" type="translate" values={`0 0; 0 ${-4 * u}; 0 0`} dur="0.5s" repeatCount="indefinite" />
-            <text x={cur.x} y={cur.y + 10 * u} fontSize={30 * u} textAnchor="middle">🏃</text>
+          <circle cx={cur.x} cy={cur.y} r={40 * u} fill="#fff" opacity={0.92} stroke={ORANGE} strokeWidth={3.5 * u} />
+          <g pointerEvents="none">
+            <animateTransform attributeName="transform" type="translate" values={`0 0; 0 ${-7 * u}; 0 0`} dur="0.5s" repeatCount="indefinite" />
+            <text x={cur.x} y={cur.y + 20 * u} fontSize={62 * u} textAnchor="middle">🏃</text>
           </g>
         </g>
         {/* 选中站点 */}
