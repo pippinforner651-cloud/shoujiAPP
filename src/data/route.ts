@@ -1,22 +1,22 @@
 // ============================================================
 // E23跑起来 · 环中国边境线接力路线主数据（冻结）
-// 标准环中国自驾环线：深圳出发 → G228沿海北上 → 丹东
-//   → G331沿边境 → 哈巴河/喀纳斯 → G219新藏滇藏线 → 东兴
-//   → G228返回深圳闭环
-// 总里程 27191 公里（≥27,000km 要求），跑量 1:1 同步，不做虚拟放大
+// 标准环中国自驾环线：北大汇丰商学院（深圳）楼下出发
+//   → G228沿海北上 → 丹东 → G331沿边境 → 哈巴河/喀纳斯
+//   → G219新藏滇藏线 → 东兴 → G228返回北大汇丰楼下闭环
+// 总里程 27171 公里（≥27,000km 要求），跑量 1:1 同步，不做虚拟放大
 // 数据结构即"地图包"接口：未来全球跑/导入第三方地图遵循同一格式
 // ============================================================
 
 export interface RouteNode {
   id: number;
-  name: string;        // 站点名
+  name: string;
   lon: number; lat: number;
-  segKm: number;       // 距上一站的真实路段里程
-  road: string;        // 当前所在真实道路
+  segKm: number;
+  road: string;
   province: string;
-  spots: string[];     // 当地名胜古迹
-  foods: string[];     // 当地美食推荐
-  cumKm: number;       // 距起点累计里程
+  spots: string[];
+  foods: string[];
+  cumKm: number;
 }
 
 export interface MapPack {
@@ -31,25 +31,25 @@ export interface MapPack {
 export const CHINA_LOOP_PACK: MapPack = {
   packId: "china-border-loop-v2",
   name: "环中国边境线（G228+G331+G219）",
-  version: "2.0.0",
-  totalKm: 27191,
+  version: "2.1.0",
+  totalKm: 27171,
   loop: true,
   nodes: [
   {
     "id": 0,
-    "name": "深圳",
-    "lon": 114.06,
-    "lat": 22.54,
+    "name": "北大汇丰商学院",
+    "lon": 113.97,
+    "lat": 22.6,
     "segKm": 0,
-    "road": "起点·G228国道",
+    "road": "起点·北大汇丰楼下→G228国道",
     "province": "广东",
     "spots": [
-      "大鹏半岛",
-      "莲花山公园"
+      "深圳大学城",
+      "西丽湖"
     ],
     "foods": [
-      "光明乳鸽",
-      "沙井生蚝"
+      "校园食堂",
+      "南山荔枝"
     ],
     "cumKm": 0
   },
@@ -58,7 +58,7 @@ export const CHINA_LOOP_PACK: MapPack = {
     "name": "惠州",
     "lon": 114.42,
     "lat": 23.1,
-    "segKm": 115,
+    "segKm": 110,
     "road": "G228国道",
     "province": "广东",
     "spots": [
@@ -69,7 +69,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "梅菜扣肉",
       "东江盐焗鸡"
     ],
-    "cumKm": 115
+    "cumKm": 110
   },
   {
     "id": 2,
@@ -87,7 +87,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "汕尾薄饼",
       "马鲛鱼丸"
     ],
-    "cumKm": 275
+    "cumKm": 270
   },
   {
     "id": 3,
@@ -105,7 +105,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "牛肉火锅",
       "蚝烙"
     ],
-    "cumKm": 490
+    "cumKm": 485
   },
   {
     "id": 4,
@@ -123,7 +123,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "沙茶面",
       "土笋冻"
     ],
-    "cumKm": 795
+    "cumKm": 790
   },
   {
     "id": 5,
@@ -141,7 +141,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "面线糊",
       "姜母鸭"
     ],
-    "cumKm": 920
+    "cumKm": 915
   },
   {
     "id": 6,
@@ -159,7 +159,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "佛跳墙",
       "福州鱼丸"
     ],
-    "cumKm": 1140
+    "cumKm": 1135
   },
   {
     "id": 7,
@@ -177,7 +177,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "大黄鱼",
       "继光饼"
     ],
-    "cumKm": 1275
+    "cumKm": 1270
   },
   {
     "id": 8,
@@ -195,7 +195,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "温州鱼丸",
       "灯盏糕"
     ],
-    "cumKm": 1580
+    "cumKm": 1575
   },
   {
     "id": 9,
@@ -213,7 +213,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "临海麦虾",
       "蛋清羊尾"
     ],
-    "cumKm": 1740
+    "cumKm": 1735
   },
   {
     "id": 10,
@@ -231,7 +231,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "宁波汤圆",
       "红膏炝蟹"
     ],
-    "cumKm": 1975
+    "cumKm": 1970
   },
   {
     "id": 11,
@@ -249,7 +249,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "生煎包",
       "本帮红烧肉"
     ],
-    "cumKm": 2320
+    "cumKm": 2315
   },
   {
     "id": 12,
@@ -267,7 +267,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "南通脆饼",
       "白蒲茶干"
     ],
-    "cumKm": 2480
+    "cumKm": 2475
   },
   {
     "id": 13,
@@ -285,7 +285,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "东台鱼汤面",
       "建湖藕粉圆"
     ],
-    "cumKm": 2675
+    "cumKm": 2670
   },
   {
     "id": 14,
@@ -303,7 +303,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "连云港海鲜",
       "板浦凉粉"
     ],
-    "cumKm": 2900
+    "cumKm": 2895
   },
   {
     "id": 15,
@@ -321,7 +321,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "日照绿茶",
       "海鲜疙瘩汤"
     ],
-    "cumKm": 3050
+    "cumKm": 3045
   },
   {
     "id": 16,
@@ -339,7 +339,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "辣炒蛤蜊",
       "青岛啤酒"
     ],
-    "cumKm": 3205
+    "cumKm": 3200
   },
   {
     "id": 17,
@@ -357,7 +357,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "烟台苹果",
       "鲅鱼水饺"
     ],
-    "cumKm": 3485
+    "cumKm": 3480
   },
   {
     "id": 18,
@@ -375,7 +375,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "威海海参",
       "鱼锅饼子"
     ],
-    "cumKm": 3590
+    "cumKm": 3585
   },
   {
     "id": 19,
@@ -392,7 +392,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "黄河口大闸蟹",
       "利津水煎包"
     ],
-    "cumKm": 4015
+    "cumKm": 4010
   },
   {
     "id": 20,
@@ -410,7 +410,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "狗不理包子",
       "煎饼果子"
     ],
-    "cumKm": 4355
+    "cumKm": 4350
   },
   {
     "id": 21,
@@ -428,7 +428,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "四条包子",
       "长城饽椤饼"
     ],
-    "cumKm": 4670
+    "cumKm": 4665
   },
   {
     "id": 22,
@@ -446,7 +446,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "虹螺岘干豆腐",
       "海鲜烧烤"
     ],
-    "cumKm": 4860
+    "cumKm": 4855
   },
   {
     "id": 23,
@@ -464,7 +464,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "营口海蜇",
       "盖州苹果"
     ],
-    "cumKm": 5070
+    "cumKm": 5065
   },
   {
     "id": 24,
@@ -482,7 +482,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "大连海参",
       "咸鱼饼子"
     ],
-    "cumKm": 5340
+    "cumKm": 5335
   },
   {
     "id": 25,
@@ -500,7 +500,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "黄蚬子",
       "朝鲜冷面"
     ],
-    "cumKm": 5705
+    "cumKm": 5700
   },
   {
     "id": 26,
@@ -518,7 +518,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "高丽火盆",
       "集安板栗"
     ],
-    "cumKm": 6050
+    "cumKm": 6045
   },
   {
     "id": 27,
@@ -536,7 +536,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "朝鲜族烤肉",
       "温泉鸡蛋"
     ],
-    "cumKm": 6415
+    "cumKm": 6410
   },
   {
     "id": 28,
@@ -553,7 +553,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "珲春大串",
       "帝王蟹"
     ],
-    "cumKm": 6826
+    "cumKm": 6821
   },
   {
     "id": 29,
@@ -571,7 +571,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "俄式列巴",
       "红肠"
     ],
-    "cumKm": 7091
+    "cumKm": 7086
   },
   {
     "id": 30,
@@ -588,7 +588,7 @@ export const CHINA_LOOP_PACK: MapPack = {
     "foods": [
       "乌苏里江鱼宴"
     ],
-    "cumKm": 7396
+    "cumKm": 7391
   },
   {
     "id": 31,
@@ -606,7 +606,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "大马哈鱼",
       "鲟鳇鱼"
     ],
-    "cumKm": 7801
+    "cumKm": 7796
   },
   {
     "id": 32,
@@ -624,7 +624,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "黑龙江江鱼",
       "山野菜"
     ],
-    "cumKm": 8266
+    "cumKm": 8261
   },
   {
     "id": 33,
@@ -642,7 +642,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "俄式西餐",
       "五大连池矿泉鱼"
     ],
-    "cumKm": 8651
+    "cumKm": 8646
   },
   {
     "id": 34,
@@ -660,7 +660,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "铁锅炖",
       "蓝莓果干"
     ],
-    "cumKm": 9286
+    "cumKm": 9281
   },
   {
     "id": 35,
@@ -677,7 +677,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "驯鹿奶列巴",
       "林区炖菜"
     ],
-    "cumKm": 9446
+    "cumKm": 9441
   },
   {
     "id": 36,
@@ -695,7 +695,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "俄式家庭餐",
       "蓝莓酱"
     ],
-    "cumKm": 9751
+    "cumKm": 9746
   },
   {
     "id": 37,
@@ -713,7 +713,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "俄式西餐",
       "手把肉"
     ],
-    "cumKm": 10176
+    "cumKm": 10171
   },
   {
     "id": 38,
@@ -731,7 +731,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "林区蘑菇",
       "泉水炖鱼"
     ],
-    "cumKm": 10611
+    "cumKm": 10606
   },
   {
     "id": 39,
@@ -749,7 +749,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "蒙餐手把肉",
       "奶茶锅茶"
     ],
-    "cumKm": 11481
+    "cumKm": 11476
   },
   {
     "id": 40,
@@ -767,7 +767,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "驼肉馅饼",
       "居延蜜瓜"
     ],
-    "cumKm": 12706
+    "cumKm": 12701
   },
   {
     "id": 41,
@@ -785,7 +785,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "哈密瓜",
       "大盘鸡"
     ],
-    "cumKm": 13811
+    "cumKm": 13806
   },
   {
     "id": 42,
@@ -803,7 +803,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "羊肉焖饼子",
       "油酥馍"
     ],
-    "cumKm": 13956
+    "cumKm": 13951
   },
   {
     "id": 43,
@@ -821,7 +821,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "额河冷水鱼",
       "哈萨克奶茶"
     ],
-    "cumKm": 14601
+    "cumKm": 14596
   },
   {
     "id": 44,
@@ -839,7 +839,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "喀纳斯冷水鱼",
       "奶疙瘩"
     ],
-    "cumKm": 15216
+    "cumKm": 15211
   },
   {
     "id": 45,
@@ -857,7 +857,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "图瓦人奶酒",
       "烤全羊"
     ],
-    "cumKm": 15336
+    "cumKm": 15331
   },
   {
     "id": 46,
@@ -875,7 +875,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "风干肉",
       "包尔萨克"
     ],
-    "cumKm": 15546
+    "cumKm": 15541
   },
   {
     "id": 47,
@@ -893,7 +893,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "塔城冰淇淋",
       "玛洛什"
     ],
-    "cumKm": 15931
+    "cumKm": 15926
   },
   {
     "id": 48,
@@ -911,7 +911,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "新疆拌面",
       "烤包子"
     ],
-    "cumKm": 16256
+    "cumKm": 16251
   },
   {
     "id": 49,
@@ -929,7 +929,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "伊犁马肠子",
       "熏马肉"
     ],
-    "cumKm": 16551
+    "cumKm": 16546
   },
   {
     "id": 50,
@@ -947,7 +947,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "昭苏油菜花海",
       "手抓肉"
     ],
-    "cumKm": 16836
+    "cumKm": 16831
   },
   {
     "id": 51,
@@ -965,7 +965,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "阿克苏冰糖心苹果",
       "馕坑肉"
     ],
-    "cumKm": 17461
+    "cumKm": 17456
   },
   {
     "id": 52,
@@ -983,7 +983,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "烤全羊",
       "石榴汁"
     ],
-    "cumKm": 17966
+    "cumKm": 17961
   },
   {
     "id": 53,
@@ -1001,7 +1001,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "叶城核桃",
       "烤蛋"
     ],
-    "cumKm": 18221
+    "cumKm": 18216
   },
   {
     "id": 54,
@@ -1019,7 +1019,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "高原路餐",
       "牦牛肉干"
     ],
-    "cumKm": 18591
+    "cumKm": 18586
   },
   {
     "id": 55,
@@ -1037,7 +1037,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "藏式牦牛肉",
       "酥油茶"
     ],
-    "cumKm": 19076
+    "cumKm": 19071
   },
   {
     "id": 56,
@@ -1055,7 +1055,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "藏餐",
       "甜茶"
     ],
-    "cumKm": 19216
+    "cumKm": 19211
   },
   {
     "id": 57,
@@ -1073,7 +1073,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "藏面",
       "风干牦牛肉"
     ],
-    "cumKm": 19561
+    "cumKm": 19556
   },
   {
     "id": 58,
@@ -1091,7 +1091,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "藏式包子",
       "青稞酒"
     ],
-    "cumKm": 20116
+    "cumKm": 20111
   },
   {
     "id": 59,
@@ -1109,7 +1109,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "高原酥油茶",
       "糌粑"
     ],
-    "cumKm": 20416
+    "cumKm": 20411
   },
   {
     "id": 60,
@@ -1127,7 +1127,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "藏香猪",
       "酥油人参果"
     ],
-    "cumKm": 20751
+    "cumKm": 20746
   },
   {
     "id": 61,
@@ -1145,7 +1145,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "洛扎藏鸡蛋",
       "土豆包子"
     ],
-    "cumKm": 20916
+    "cumKm": 20911
   },
   {
     "id": 62,
@@ -1163,7 +1163,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "门巴族荞麦饼",
       "鸡爪谷酒"
     ],
-    "cumKm": 21181
+    "cumKm": 21176
   },
   {
     "id": 63,
@@ -1181,7 +1181,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "林芝石锅鸡",
       "松茸"
     ],
-    "cumKm": 21676
+    "cumKm": 21671
   },
   {
     "id": 64,
@@ -1199,7 +1199,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "察隅手抓饭",
       "藏香猪"
     ],
-    "cumKm": 22191
+    "cumKm": 22186
   },
   {
     "id": 65,
@@ -1217,7 +1217,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "怒族石板粑粑",
       "漆油鸡"
     ],
-    "cumKm": 22506
+    "cumKm": 22501
   },
   {
     "id": 66,
@@ -1235,7 +1235,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "腾冲大救驾",
       "土锅子"
     ],
-    "cumKm": 22971
+    "cumKm": 22966
   },
   {
     "id": 67,
@@ -1253,7 +1253,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "傣味烧烤",
       "菠萝饭"
     ],
-    "cumKm": 23766
+    "cumKm": 23761
   },
   {
     "id": 68,
@@ -1271,7 +1271,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "哈尼蘸水鸡",
       "竹筒饭"
     ],
-    "cumKm": 24151
+    "cumKm": 24146
   },
   {
     "id": 69,
@@ -1289,7 +1289,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "壮家花米饭",
       "草果炖鸡"
     ],
-    "cumKm": 24476
+    "cumKm": 24471
   },
   {
     "id": 70,
@@ -1307,7 +1307,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "越南卷粉",
       "凭祥水果捞"
     ],
-    "cumKm": 24971
+    "cumKm": 24966
   },
   {
     "id": 71,
@@ -1325,7 +1325,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "东兴海鲜",
       "越南春卷"
     ],
-    "cumKm": 25266
+    "cumKm": 25261
   },
   {
     "id": 72,
@@ -1343,7 +1343,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "钦州大蚝",
       "猪脚粉"
     ],
-    "cumKm": 25451
+    "cumKm": 25446
   },
   {
     "id": 73,
@@ -1361,7 +1361,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "北海海鲜",
       "糖水"
     ],
-    "cumKm": 25651
+    "cumKm": 25646
   },
   {
     "id": 74,
@@ -1379,7 +1379,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "湛江生蚝",
       "白切鸡"
     ],
-    "cumKm": 25961
+    "cumKm": 25956
   },
   {
     "id": 75,
@@ -1397,7 +1397,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "阳江豆豉",
       "猪肠碌"
     ],
-    "cumKm": 26366
+    "cumKm": 26361
   },
   {
     "id": 76,
@@ -1415,15 +1415,15 @@ export const CHINA_LOOP_PACK: MapPack = {
       "横琴蚝",
       "斗门重壳蟹"
     ],
-    "cumKm": 26846
+    "cumKm": 26841
   },
   {
     "id": 77,
-    "name": "深圳·终点",
-    "lon": 114.06,
-    "lat": 22.54,
-    "segKm": 345,
-    "road": "G228国道·闭环",
+    "name": "北大汇丰商学院·终点",
+    "lon": 113.97,
+    "lat": 22.6,
+    "segKm": 330,
+    "road": "G228国道→北大汇丰楼下·闭环",
     "province": "广东",
     "spots": [
       "深圳湾公园",
@@ -1433,7 +1433,7 @@ export const CHINA_LOOP_PACK: MapPack = {
       "椰子鸡",
       "光明乳鸽"
     ],
-    "cumKm": 27191
+    "cumKm": 27171
   }
 ]
 };

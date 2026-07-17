@@ -12,7 +12,7 @@ export default function LoginPage() {
     // 真实实现：跳转微信OAuth → 后端 code2session → 返回 openid+头像+昵称
     setTimeout(() => {
       store.login(DEMO_NAMES[Math.floor(Math.random() * DEMO_NAMES.length)]);
-    }, 800);
+    }, 300);
   };
 
   return (
