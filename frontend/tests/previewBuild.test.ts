@@ -24,9 +24,13 @@ test('V2 preview is explicitly labelled and multiplayer is not presented as live
 test('Android preview build is isolated from the V1 package', () => {
   const gradle = read('../android/app/build.gradle');
   const manifest = read('../android/app/src/main/AndroidManifest.xml');
+  const activity = read('../android/app/src/main/java/com/e23running/app/MainActivity.java');
   assert.match(gradle, /com\.e23running\.app\.preview/);
-  assert.match(gradle, /2\.0\.0-preview\.1/);
+  assert.match(gradle, /versionCode e23Preview \? 20002 : 2/);
+  assert.match(gradle, /2\.0\.0-preview\.2/);
   assert.match(manifest, /\$\{appLabel\}/);
+  assert.match(manifest, /android:name="com\.e23running\.app\.MainActivity"/);
+  assert.match(activity, /package com\.e23running\.app;/);
 });
 
 test('APK workflow contains the required preview quality and safety gates', () => {

@@ -9,8 +9,8 @@ android {
         applicationId e23Preview ? "com.e23running.app.preview" : "com.e23running.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode e23Preview ? 20001 : 2
-        versionName e23Preview ? "2.0.0-preview.1" : "1.0.1"
+        versionCode e23Preview ? 20002 : 2
+        versionName e23Preview ? "2.0.0-preview.2" : "1.0.1"
         manifestPlaceholders = [appLabel: e23Preview ? "E23跑起来预览版" : "E23跑起来"]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

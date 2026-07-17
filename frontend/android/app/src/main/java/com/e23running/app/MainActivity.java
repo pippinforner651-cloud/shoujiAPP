@@ -1,4 +1,4 @@
-package com.chinarun.app;
+package com.e23running.app;
 
 import com.getcapacitor.BridgeActivity;
 
