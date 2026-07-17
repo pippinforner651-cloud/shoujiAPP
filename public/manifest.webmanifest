@@ -1,0 +1,13 @@
+{
+  "name": "E23跑起来 · 环中国边境线接力",
+  "short_name": "E23跑起来",
+  "description": "E23班环中国边境线27,171公里接力，跑量1:1同步中国地图",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F4F8F6",
+  "theme_color": "#FF6B1A",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }
+  ]
+}
