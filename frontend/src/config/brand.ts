@@ -1,4 +1,4 @@
-import { APP_VERSION_LABEL } from './buildVariant';
+import { APP_VERSION_LABEL, IS_V2_PREVIEW } from './buildVariant';
 
 /**
  * E23跑起来 — 品牌文案包 V1.0
@@ -23,7 +23,7 @@ export const BRAND = {
   /* ======= 启动页 ======= */
   SPLASH: {
     main: '每一步，都在环游中国',
-    bottom: '48城 · 21,423公里 · 1:10虚拟推进',
+    bottom: IS_V2_PREVIEW ? '真实1:1 · 27,000+公里正式路线待核验' : '48城 · 21,423公里 · 1:10虚拟推进',
   },
 
   /* ======= 登录/注册 ======= */

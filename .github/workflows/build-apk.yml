@@ -72,8 +72,8 @@ jobs:
             echo "VITE_MULTIPLAYER_MODE=disabled" >> "$GITHUB_ENV"
             echo "VITE_E23_EVENT_ID=" >> "$GITHUB_ENV"
             echo "VITE_API_BASE_URL=" >> "$GITHUB_ENV"
-            echo "APK_FILE=E23跑起来_V2预览测试版.apk" >> "$GITHUB_ENV"
-            echo "ARTIFACT_NAME=${ARTIFACT_NAME:-E23跑起来_V2预览测试版}" >> "$GITHUB_ENV"
+            echo "APK_FILE=E23跑起来_V2预览测试版_R2.apk" >> "$GITHUB_ENV"
+            echo "ARTIFACT_NAME=${ARTIFACT_NAME:-E23跑起来_V2预览测试版_R2}" >> "$GITHUB_ENV"
             echo "GRADLE_PREVIEW_ARG=-Pe23Preview=true" >> "$GITHUB_ENV"
           else
             API_URL="${{ github.event.inputs.api_base_url || vars.VITE_API_BASE_URL || 'https://chinarun-api.onrender.com' }}"
@@ -146,6 +146,30 @@ jobs:
           export ANDROID_HOME="$ANDROID_SDK_ROOT"
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon $GRADLE_PREVIEW_ARG
+
+      - name: Five-round Android emulator cold-start gate
+        if: env.BUILD_VARIANT == 'v2-preview'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: >-
+            bash scripts/android/emulator-smoke.sh
+            frontend/android/app/build/outputs/apk/debug/app-debug.apk
+            com.e23running.app.preview
+            com.e23running.app.MainActivity
+            android-smoke-logs
+
+      - name: Upload Android startup evidence
+        if: always() && env.BUILD_VARIANT == 'v2-preview'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-startup-evidence-${{ github.run_id }}
+          path: android-smoke-logs
+          retention-days: 30
+          if-no-files-found: warn
 
       - name: Verify signature and calculate SHA256
         shell: bash

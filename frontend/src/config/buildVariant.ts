@@ -10,6 +10,10 @@ export function getPreviewLabel(variant: BuildVariant): string | null {
     : null;
 }
 
+export function getActiveScaleRatio(variant: BuildVariant, frozenV1Ratio: number): number {
+  return variant === 'v2-preview' ? 1 : frozenV1Ratio;
+}
+
 const viteEnv = (import.meta as ImportMeta & {
   env?: { VITE_BUILD_VARIANT?: string; VITE_APP_VERSION_LABEL?: string };
 }).env;

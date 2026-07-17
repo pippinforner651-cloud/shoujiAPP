@@ -6,6 +6,7 @@
  */
 import { getRouteData } from '../data/routeLoader';
 import { getGeometryData } from '../data/routeGeometryLoader';
+import { BUILD_VARIANT, getActiveScaleRatio } from '../config/buildVariant';
 import {
   calculateRouteProgress as calculateRouteProgressCore,
   type RouteProgressResult,
@@ -30,10 +31,11 @@ export interface RouteSplit {
  */
 export function calculateRouteProgress(actualDistanceKm: number): RouteProgressResult {
   const { meta, nodes, closure } = getRouteData();
+  const activeScaleRatio = getActiveScaleRatio(BUILD_VARIANT, meta.scaleRatio);
   return calculateRouteProgressCore(actualDistanceKm, {
     meta: {
       total_distance_km: meta.totalDistanceKm,
-      scale_ratio: meta.scaleRatio,
+      scale_ratio: activeScaleRatio,
       start_city: meta.startCity,
       end_city: meta.endCity,
     },
@@ -54,7 +56,8 @@ export function calculateRouteProgress(actualDistanceKm: number): RouteProgressR
 /** 地图与图表已经持有虚拟里程时使用，仍回到同一计算核心。 */
 export function calculateRouteProgressFromVirtual(virtualDistanceKm: number): RouteProgressResult {
   const { meta } = getRouteData();
-  return calculateRouteProgress(virtualDistanceKm / meta.scaleRatio);
+  const activeScaleRatio = getActiveScaleRatio(BUILD_VARIANT, meta.scaleRatio);
+  return calculateRouteProgress(virtualDistanceKm / activeScaleRatio);
 }
 
 /**

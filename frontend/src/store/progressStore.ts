@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 import { getRouteData } from '../data/routeLoader';
+import { BUILD_VARIANT, getActiveScaleRatio } from '../config/buildVariant';
 import { calculateRouteProgress } from '../utils/routeProgress';
 import { useRunStore } from './runStore';
 import type { ProgressInfo, ProgressSnapshot } from '../types/progress';
@@ -35,7 +36,8 @@ function saveSnapshot(lastVirtualKm: number, lastCityIndex: number): void {
 
 function computeProgress(realKm: number): ProgressInfo {
   const routeProgress = calculateRouteProgress(realKm);
-  const { nodes } = getRouteData();
+  const { nodes, meta } = getRouteData();
+  const activeScaleRatio = getActiveScaleRatio(BUILD_VARIANT, meta.scaleRatio);
   const findNode = (id: string | undefined) => nodes.find((node) => node.id === id) ?? null;
   const startNode = nodes[0] ?? null;
   const isClosureEndpoint = routeProgress.currentNode?.id === 'closure-endpoint';
@@ -59,7 +61,7 @@ function computeProgress(realKm: number): ProgressInfo {
       : currentCity?.totalDistanceKm ?? 0,
     nextCity,
     remainingToNextKm: Math.round(routeProgress.distanceToNextCityKm * 100) / 100,
-    remainingToNextRealKm: Math.round((routeProgress.distanceToNextCityKm / getRouteData().meta.scaleRatio) * 100) / 100,
+    remainingToNextRealKm: Math.round((routeProgress.distanceToNextCityKm / activeScaleRatio) * 100) / 100,
     headingToCity: routeProgress.isCompleted
       ? '已完成全程'
       : routeProgress.nextCity ?? '数据加载中',
@@ -79,8 +81,10 @@ export const useProgressStore = create<ProgressStoreState>((set) => ({
 
   initialize: () => {
     const snap = loadSnapshot();
+    const { meta } = getRouteData();
+    const activeScaleRatio = getActiveScaleRatio(BUILD_VARIANT, meta.scaleRatio);
     const initialRealKm = snap
-      ? snap.lastVirtualKm / getRouteData().meta.scaleRatio
+      ? snap.lastVirtualKm / activeScaleRatio
       : useRunStore.getState().stats.totalDistanceKm;
     set({ info: computeProgress(initialRealKm), initialized: true });
   },
