@@ -151,7 +151,7 @@ jobs:
         if: env.BUILD_VARIANT == 'v2-preview'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 35
           arch: x86_64
           profile: pixel_6
           disable-animations: false
