@@ -4,8 +4,9 @@
  */
 import { create } from 'zustand';
 import { getRouteData } from '../data/routeLoader';
-import { BUILD_VARIANT, getActiveScaleRatio } from '../config/buildVariant';
+import { BUILD_VARIANT, getActiveScaleRatio, IS_V2_PREVIEW } from '../config/buildVariant';
 import { calculateRouteProgress } from '../utils/routeProgress';
+import { calculatePreviewRouteProgress } from '../utils/previewRouteProgress';
 import { useRunStore } from './runStore';
 import type { ProgressInfo, ProgressSnapshot } from '../types/progress';
 import { PROGRESS_STORAGE_KEY, PROGRESS_STORAGE_VERSION } from '../types/progress';
@@ -35,7 +36,9 @@ function saveSnapshot(lastVirtualKm: number, lastCityIndex: number): void {
 }
 
 function computeProgress(realKm: number): ProgressInfo {
-  const routeProgress = calculateRouteProgress(realKm);
+  const routeProgress = IS_V2_PREVIEW
+    ? calculatePreviewRouteProgress(realKm)
+    : calculateRouteProgress(realKm);
   const { nodes, meta } = getRouteData();
   const activeScaleRatio = getActiveScaleRatio(BUILD_VARIANT, meta.scaleRatio);
   const findNode = (id: string | undefined) => nodes.find((node) => node.id === id) ?? null;

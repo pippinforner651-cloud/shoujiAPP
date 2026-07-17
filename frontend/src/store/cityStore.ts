@@ -11,6 +11,8 @@
 import { create } from 'zustand';
 import { getRouteData } from '../data/routeLoader';
 import { calculateRouteProgress } from '../utils/routeProgress';
+import { calculatePreviewRouteProgress } from '../utils/previewRouteProgress';
+import { IS_V2_PREVIEW } from '../config/buildVariant';
 import type { CityUnlock, CityStorage } from '../types/city';
 import { CITY_STORAGE_KEY, CITY_STORAGE_VERSION } from '../types/city';
 
@@ -141,7 +143,10 @@ export const useCityStore = create<CityState>((set, get) => ({
   },
 
   checkAndUnlock: (realKm: number) => {
-    const unlockedIds = new Set(calculateRouteProgress(realKm).unlockedCityIds);
+    const routeProgress = IS_V2_PREVIEW
+      ? calculatePreviewRouteProgress(realKm)
+      : calculateRouteProgress(realKm);
+    const unlockedIds = new Set(routeProgress.unlockedCityIds);
     const unlockedMap = new Set(get().unlockedCities.map((c) => c.city));
     const newCities = detectNewCities(unlockedIds, unlockedMap);
 

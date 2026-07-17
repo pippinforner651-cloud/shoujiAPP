@@ -7,6 +7,7 @@ import {
   getPreviewLabel,
   resolveBuildVariant,
 } from '../src/config/buildVariant.ts';
+import { calculatePreviewRouteProgressCore } from '../src/utils/previewRouteProgressCore.ts';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -22,6 +23,15 @@ test('V2 preview is explicitly labelled and multiplayer is not presented as live
   assert.match(getPreviewLabel('v2-preview') ?? '', /多人功能尚未上线/);
   assert.equal(getActiveScaleRatio('v2-preview', 10), 1);
   assert.equal(getActiveScaleRatio('v1', 10), 10);
+  const previewProgress = calculatePreviewRouteProgressCore(1, {
+    meta: { total_distance_km: 27000, scale_ratio: 10, start_city: '深圳', end_city: '深圳' },
+    nodes: [
+      { id: 'start', city: '深圳', total_distance_km: 0 },
+      { id: 'next', city: '下一站', total_distance_km: 100 },
+    ],
+    closure: { from_city: '下一站', to_city: '深圳', distance_km: 26900, total_distance_km: 27000 },
+  });
+  assert.equal(previewProgress.virtualDistanceKm, 1);
 });
 
 test('V2 preview copy explains one-to-one progress and the unlaunched route', () => {
