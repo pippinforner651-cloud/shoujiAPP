@@ -91,6 +91,8 @@ class Store {
 
   // ---- 本机真实统计 ----
   get myTotalKm() { return this.records.reduce((s, r) => s + r.km, 0); }
+  // 全班累计：多人后端未上线前 = 本机贡献；上线后 = 全体E23成员真实跑量之和
+  get classTotalKm() { return this.myTotalKm; }
   get myTodayKm() {
     const d0 = new Date(); d0.setHours(0, 0, 0, 0);
     return this.records.filter((r) => r.ts >= d0.getTime()).reduce((s, r) => s + r.km, 0);

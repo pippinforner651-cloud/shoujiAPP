@@ -9,10 +9,12 @@ export default function MapPage() {
   useSyncExternalStore((f) => store.subscribe(f), () => store.version);
   const [selected, setSelected] = useState<RouteNode | null>(null);
   const [posOpen, setPosOpen] = useState(false);
+  const [view, setView] = useState<'team' | 'me'>('team');
   const pack = useMemo(() => getActivePack(store.customPack), [store.customPack]);
 
-  // 多人后端未上线：全部统计仅来自本机真实记录
-  const total = store.myTotalKm;
+  // 两张地图：班级接力图（全班累计）+ 我的足迹图（个人累计）
+  // 多人后端未上线：两者都仅含本机真实贡献，班级图照常显示并如实标注
+  const total = view === 'team' ? store.classTotalKm : store.myTotalKm;
   const pos = useMemo(() => positionAt(pack.totalKm > 0 ? total % pack.totalKm : 0), [total, pack.totalKm]);
   const heading = useMemo(() => nextNamedNode(total), [total]);
   const pct = pack.totalKm > 0 ? Math.min(100, (total / pack.totalKm) * 100) : 0;
@@ -25,9 +27,20 @@ export default function MapPage() {
     <div className="flex flex-col h-full">
       {/* 顶部统计区 */}
       <div className="px-4 pt-3 pb-2 bg-gradient-to-b from-emerald-50 to-transparent">
+        {/* 双地图切换：班级接力 / 我的足迹 */}
+        <div className="grid grid-cols-2 p-1 rounded-full bg-slate-200/70 mb-2.5">
+          <button onClick={() => setView('team')}
+            className={`py-1.5 rounded-full text-sm font-bold transition ${view === 'team' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}>
+            班级接力图
+          </button>
+          <button onClick={() => setView('me')}
+            className={`py-1.5 rounded-full text-sm font-bold transition ${view === 'me' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}>
+            我的足迹图
+          </button>
+        </div>
         <div className="flex items-end justify-between">
           <div>
-            <div className="text-xs text-slate-500">E23班环中国接力 · 累计（本机）</div>
+            <div className="text-xs text-slate-500">{view === 'team' ? 'E23班环中国接力 · 全班累计' : '我的足迹 · 个人累计'}</div>
             <div className="text-3xl font-black text-slate-800 leading-tight">
               {total.toLocaleString('zh-CN', { maximumFractionDigits: 1 })}
               <span className="text-base font-semibold text-slate-500 ml-1">km</span>
@@ -64,7 +77,9 @@ export default function MapPage() {
         {/* 多人状态：不伪造人数/里程 */}
         {!CONFIG.MULTIPLAYER_ENABLED && (
           <div className="mt-2 text-[11px] px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 text-center">
-            多人功能尚未上线 · 今日参与人数、全班里程需后端接入后显示 · 当前仅为本机真实数据
+            {view === 'team'
+              ? '多人功能尚未上线 · 今日参与人数和全班总里程需后端接入 · 当前班级图仅显示本机贡献'
+              : '多人功能尚未上线 · 当前足迹图为本机真实数据'}
           </div>
         )}
       </div>
