@@ -1,0 +1,57 @@
+name: E23 PWA 部署 GitHub Pages
+
+# 仅 Kimi 产品线分支触发
+on:
+  push:
+    branches: [kimi/e23-v2-product]
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+  contents: read
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 严格锁定安装（npm ci）
+        run: npm ci
+
+      - name: TypeScript 检查
+        run: npx tsc -b
+
+      - name: 自动测试
+        run: npm run test:unit
+
+      - name: Vite 生产构建（注入 Commit SHA）
+        run: npm run build
+        env:
+          VITE_COMMIT_SHA: ${{ github.sha }}
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v4
+
+      - name: 上传 Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: 部署 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+# 与 APK 工作流使用同一 Commit（同一 push 触发）；页面内显示 Commit 短 SHA 与「Kimi预览版」

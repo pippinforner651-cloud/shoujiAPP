@@ -16,4 +16,6 @@ export const CONFIG = {
   MAP_PROVIDER: import.meta.env.VITE_MAP_PROVIDER ?? 'static-pack',
   // 版本标识：预览版页面明示，正式版单独迁移确认
   APP_EDITION: 'Kimi预览版',
+  // 构建时由 GitHub Actions 注入（本地开发为 local）
+  COMMIT_SHA: (import.meta.env.VITE_COMMIT_SHA ?? 'local').slice(0, 7),
 };

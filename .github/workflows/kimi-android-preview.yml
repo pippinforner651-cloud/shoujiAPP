@@ -1,0 +1,77 @@
+name: E23 Android 预览版 APK
+
+# 仅 Kimi 产品线分支触发；不触碰 main / codex 分支
+on:
+  push:
+    branches: [kimi/e23-v2-product]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 严格锁定安装（npm ci）
+        run: npm ci
+
+      - name: TypeScript 检查
+        run: npx tsc -b
+
+      - name: 自动测试
+        run: npm run test:unit
+        # 单元测试脚本见 package.json（无浏览器依赖的断言集）
+
+      - name: Vite 生产构建
+        run: npm run build
+
+      - name: 同步 Android Web 资源
+        run: npx cap sync android
+
+      - name: Gradle 构建 Debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: 检查 APK 存在
+        run: |
+          APK=$(ls android/app/build/outputs/apk/debug/app-debug.apk)
+          echo "找到 APK: $APK"
+          test -f "$APK"
+
+      - name: apksigner 验证签名
+        run: |
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          $ANDROID_HOME/build-tools/34.0.0/apksigner verify --verbose "$APK"
+
+      - name: 生成 SHA256
+        run: sha256sum android/app/build/outputs/apk/debug/app-debug.apk | tee apk-sha256.txt
+
+      - name: 重命名为 Kimi 预览版
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk "E23跑起来_Kimi预览版.apk"
+
+      - name: 上传 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: E23跑起来_Kimi预览版
+          path: |
+            E23跑起来_Kimi预览版.apk
+            apk-sha256.txt
+          retention-days: 30
+
+# 明确禁止：数据库迁移 / 生产数据库 / 真实密钥 / 真实微信 / 虚假多人数据（本流程无任何此类步骤）

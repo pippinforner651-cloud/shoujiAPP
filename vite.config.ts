@@ -5,7 +5,8 @@ import { inspectAttr } from 'kimi-plugin-inspect-react'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: './',
+  // GitHub Pages 子路径部署：Actions 注入 VITE_BASE_PATH=/shoujiAPP/；本地默认相对路径（子路径不白屏）
+  base: process.env.VITE_BASE_PATH ?? './',
   plugins: [inspectAttr(), react()],
   server: {
     port: 3000,
