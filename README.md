@@ -11,7 +11,7 @@ React 19 + TypeScript + Vite + Tailwind CSS · 纯静态 PWA · 数据存本机 
 ## 标准命令
 
 ```bash
-npm install          # 安装依赖（使用 package-lock.json 锁定版本）
+npm ci               # 严格按 package-lock.json 安装（CI/交付统一用 npm ci，不用 npm install）
 npm run dev          # 开发调试（默认 3000 端口）
 npm run build        # TypeScript 检查 + 生产构建（输出 dist/）
 npm run preview      # 本地预览生产构建
@@ -36,14 +36,16 @@ npm run manifest     # 重新生成 docs/文件清单.md
 
 `public/manifest.webmanifest` + `apple-touch-icon` 已配置。iPhone Safari：分享 → 添加到主屏幕，全屏运行。
 
-## Capacitor Android（由第二阶段执行）
+## Capacitor Android
 
-`capacitor.config.ts` 已在仓库内（appId `com.e23running.app`，webDir `dist`），无需再 `cap init`：
+- appId：`com.e23running.app.kimi.preview`（Kimi 预览版专用；**正式包名 `com.e23running.app` 本版不使用，待正式版单独迁移确认**）
+- appName：`E23跑起来 Kimi预览版`
+- `android/` 工程**已生成并纳入源码包**，无需再执行 `cap:add:android`
+- Capacitor 依赖（core/cli/android）已全部锁定在 package-lock.json
 
 ```bash
-npm install @capacitor/core @capacitor/cli @capacitor/android
-npm run cap:add:android   # 仅首次：生成 android/ 工程
-npm run apk:debug         # 构建 dist → 同步 → 打出 debug APK
+npm ci
+npm run apk:debug   # 构建 dist → npx cap sync → gradle assembleDebug（需 Android SDK）
 ```
 
 Web 与 APK 必须从**同一 Git Commit** 构建：`apk:debug` 脚本已内含 `npm run build && npx cap sync`。

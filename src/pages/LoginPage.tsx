@@ -22,6 +22,7 @@ export default function LoginPage() {
           <span className="text-[11px] font-bold mt-1 tracking-[0.2em]">跑起来</span>
         </div>
         <div className="text-2xl font-black mb-2">E23跑起来</div>
+        <div className="mb-3 text-[11px] px-3 py-1 rounded-full bg-white/15 text-white/80 font-bold tracking-wider">{CONFIG.APP_EDITION}</div>
         <div className="text-sm text-white/70 text-center leading-relaxed">
           北京大学汇丰商学院 EMBA E23班<br />环中国边境线 27,171 公里接力
         </div>

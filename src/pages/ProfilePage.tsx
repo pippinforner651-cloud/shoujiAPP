@@ -161,7 +161,7 @@ export default function ProfilePage() {
 
       <div className="px-4 mt-4">
         <button onClick={() => store.logout()} className="w-full py-3 rounded-2xl bg-white text-slate-500 text-sm shadow-sm">退出登录</button>
-        <div className="text-center text-xs text-slate-400 mt-4">E23跑起来 · 健康到永远</div>
+        <div className="text-center text-xs text-slate-400 mt-4">E23跑起来 · {CONFIG.APP_EDITION} · 健康到永远</div>
       </div>
 
       {/* 路线校验报告抽屉 */}

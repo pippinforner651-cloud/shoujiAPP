@@ -14,4 +14,6 @@ export const CONFIG = {
   ROUTE_STATUS: 'DRAFT' as 'DRAFT' | 'RELEASED',
   // 未来地图服务（高德等）接入预留
   MAP_PROVIDER: import.meta.env.VITE_MAP_PROVIDER ?? 'static-pack',
+  // 版本标识：预览版页面明示，正式版单独迁移确认
+  APP_EDITION: 'Kimi预览版',
 };

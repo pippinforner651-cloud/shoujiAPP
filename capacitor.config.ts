@@ -4,9 +4,10 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // 构建 APK 前：npm install @capacitor/core @capacitor/cli @capacitor/android
 // 然后：npm run cap:add:android（首次）→ npm run apk:debug
 // Web 与 APK 必须同一 Commit：先 npm run build 生成 dist，再 npx cap sync
+// 注意：正式包名 com.e23running.app 不在本预览版使用，待正式版单独迁移确认
 const config: CapacitorConfig = {
-  appId: 'com.e23running.app',
-  appName: 'E23跑起来',
+  appId: 'com.e23running.app.kimi.preview',
+  appName: 'E23跑起来 Kimi预览版',
   webDir: 'dist',
   backgroundColor: '#F4F8F6',
   android: {

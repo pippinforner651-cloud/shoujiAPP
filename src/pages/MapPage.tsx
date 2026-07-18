@@ -47,7 +47,7 @@ export default function MapPage() {
             </div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-slate-500">环线总长</div>
+            <div className="text-xs text-slate-500">环线总长 <span className="text-[9px] px-1 py-0.5 rounded bg-slate-200 text-slate-500 font-bold">{CONFIG.APP_EDITION}</span></div>
             <div className="text-lg font-bold text-slate-700">{pack.totalKm.toLocaleString()} km</div>
           </div>
         </div>
