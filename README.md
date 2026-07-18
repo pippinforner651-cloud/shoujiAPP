@@ -15,6 +15,8 @@ npm install          # 安装依赖（使用 package-lock.json 锁定版本）
 npm run dev          # 开发调试（默认 3000 端口）
 npm run build        # TypeScript 检查 + 生产构建（输出 dist/）
 npm run preview      # 本地预览生产构建
+npm run test:mobile  # iPhone 等效环境自动化测试（需本地静态服务）
+npm run manifest     # 重新生成 docs/文件清单.md
 ```
 
 ## 运行时配置（环境变量）
@@ -36,14 +38,15 @@ npm run preview      # 本地预览生产构建
 
 ## Capacitor Android（由第二阶段执行）
 
+`capacitor.config.ts` 已在仓库内（appId `com.e23running.app`，webDir `dist`），无需再 `cap init`：
+
 ```bash
 npm install @capacitor/core @capacitor/cli @capacitor/android
-npx cap init "E23跑起来" com.e23running.app --web-dir=dist
-npm run build && npx cap add android && npx cap sync
-cd android && ./gradlew assembleDebug
+npm run cap:add:android   # 仅首次：生成 android/ 工程
+npm run apk:debug         # 构建 dist → 同步 → 打出 debug APK
 ```
 
-Web 与 APK 必须从**同一 Git Commit** 构建：先 `npm run build` 生成 `dist/`，再 `npx cap sync`。
+Web 与 APK 必须从**同一 Git Commit** 构建：`apk:debug` 脚本已内含 `npm run build && npx cap sync`。
 
 ## 数据规则（铁律）
 
