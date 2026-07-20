@@ -74,3 +74,21 @@ test('Sites worker serves the PWA shell for direct Safari routes', async () => {
   assert.equal(await response.text(), 'E23 V2 preview shell');
   assert.deepEqual(requests, ['/my', '/index.html']);
 });
+
+test('Sites worker exposes a direct hosting health probe without asset lookup', async () => {
+  const env = {
+    ASSETS: {
+      fetch: async () => {
+        throw new Error('health probe must not depend on static asset mounting');
+      },
+    },
+  };
+
+  const response = await staticWorker.fetch(
+    new Request('https://preview.example/__health'),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'E23_SITES_WORKER_OK');
+});
