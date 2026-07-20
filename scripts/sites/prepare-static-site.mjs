@@ -27,10 +27,10 @@ for (const entry of readdirSync(distRoot)) {
 }
 
 rmSync(distRoot, { recursive: true, force: true });
-mkdirSync(resolve(distRoot, 'static'), { recursive: true });
+mkdirSync(resolve(distRoot, 'client'), { recursive: true });
 mkdirSync(resolve(distRoot, 'server'), { recursive: true });
 for (const entry of readdirSync(stagingRoot)) {
-  cpSync(resolve(stagingRoot, entry), resolve(distRoot, 'static', entry), { recursive: true });
+  cpSync(resolve(stagingRoot, entry), resolve(distRoot, 'client', entry), { recursive: true });
 }
 rmSync(stagingRoot, { recursive: true, force: true });
 
@@ -41,4 +41,3 @@ writeFileSync(
 );
 
 console.log(`Prepared static Sites build at ${distRoot}`);
-
