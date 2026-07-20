@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import CityBottomSheet from './components/CityBottomSheet';
 import E23Icon from './components/E23Icon';
+import PreviewNotice from './components/PreviewNotice';
+import { IS_V2_PREVIEW } from './config/buildVariant';
 import { useAchievementStore } from './store/achievementStore';
 import { useCityStore } from './store/cityStore';
 import { subscribeProgress, useProgressStore } from './store/progressStore';
@@ -61,6 +63,7 @@ export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
 
   return (
     <div className="app app-mobile">
+      <PreviewNotice compact />
       <main className="app-main-mobile">
         {activeTab === 'home' && (
           <div className="tab-page tab-scroll journey-home">
@@ -73,8 +76,10 @@ export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
               <section className="first-run-hero">
                 <div className="first-run-route"><span>深圳</span><div><i /></div><span>厦门</span></div>
                 <p className="section-kicker">你的中国旅程等待第一步</p>
-                <h2>跑1公里，路线前进10公里</h2>
-                <p>从深圳出发，沿48座城市完成21,423公里的闭环旅程。记录保存在当前设备。</p>
+                <h2>{IS_V2_PREVIEW ? '有效运动1公里，个人贡献1公里' : '跑1公里，路线前进10公里'}</h2>
+                <p>{IS_V2_PREVIEW
+                  ? 'V2按真实1:1展示个人进度；27,000+公里正式路线尚未上线，当前不生成全班进度。'
+                  : '从深圳出发，沿48座城市完成21,423公里的闭环旅程。记录保存在当前设备。'}</p>
                 <button className="primary-action" onClick={() => setActiveTab('run')}>
                   <E23Icon name="run" size={20} /> 录入第一条跑步
                 </button>
@@ -97,14 +102,16 @@ export default function MainApp({ onLogout, initialTab = 'home' }: Props) {
               <div className="section-heading"><div><p className="section-kicker">当前旅程</p><h2>{currentCity} <span>前往</span> {nextCity}</h2></div><strong>{progress.completionRate.toFixed(1)}%</strong></div>
               <div className="journey-progress-track"><i style={{ width: `${progress.completionRate}%` }} /></div>
               <div className="journey-metrics">
-                <div><span>距下一站</span><strong>{progress.remainingToNextKm.toLocaleString()}<small> 虚拟km</small></strong></div>
+                <div><span>距下一站</span><strong>{progress.remainingToNextKm.toLocaleString()}<small> {IS_V2_PREVIEW ? '路线km' : '虚拟km'}</small></strong></div>
                 <div><span>还需真实跑步</span><strong>{progress.remainingToNextRealKm.toFixed(1)}<small> km</small></strong></div>
               </div>
-              <p className="journey-route-note">累计实际 {stats.totalDistanceKm.toFixed(1)} km · 虚拟推进 {progress.virtualKm.toLocaleString()} km</p>
+              <p className="journey-route-note">{IS_V2_PREVIEW
+                ? `累计个人贡献 ${stats.totalDistanceKm.toFixed(1)} km · 1:1路线预览 ${progress.virtualKm.toLocaleString()} km`
+                : `累计实际 ${stats.totalDistanceKm.toFixed(1)} km · 虚拟推进 ${progress.virtualKm.toLocaleString()} km`}</p>
             </section>
 
             <section className="home-map-journey" aria-label="中国环游路线地图">
-              <div className="section-heading"><div><p className="section-kicker">路线位置</p><h2>每一步都在地图上发生</h2></div></div>
+              <div className="section-heading"><div><p className="section-kicker">{IS_V2_PREVIEW ? '静态中国路线界面预览' : '路线位置'}</p><h2>每一步都在地图上发生</h2></div></div>
               <Suspense fallback={<LoadingPanel label="正在加载路线地图" />}><ChinaMap mode="personal" height="228px" /></Suspense>
             </section>
 

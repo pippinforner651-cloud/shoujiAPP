@@ -1,14 +1,20 @@
 apply plugin: 'com.android.application'
 
+def e23Preview = project.findProperty('e23Preview') == 'true'
+
 android {
     namespace = "com.e23running.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.e23running.app"
+        applicationId e23Preview ? "com.e23running.app.preview" : "com.e23running.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.0.1"
+        versionCode e23Preview ? 20003 : 2
+        versionName e23Preview ? "2.0.0-preview.3" : "1.0.1"
+        manifestPlaceholders = [
+            appLabel: e23Preview ? "E23跑起来预览版" : "E23跑起来",
+            hardwareAccelerated: e23Preview ? "false" : "true"
+        ]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

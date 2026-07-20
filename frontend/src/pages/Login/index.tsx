@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import E23BrandMark from '../../components/E23BrandMark';
 import E23Icon from '../../components/E23Icon';
+import PreviewNotice from '../../components/PreviewNotice';
 import { BRAND } from '../../config/brand';
+import { IS_V2_PREVIEW } from '../../config/buildVariant';
 import { useUserStore } from '../../store/userStore';
 import { validatePhone } from '../../utils/authCore';
 import { AuthAgreement, TestModeNotice, useTestCode } from '../AuthShared';
@@ -40,10 +42,12 @@ export default function Login({ onGoToRegister, onLoginSuccess }: Props) {
       <section className="login-shell">
         <header className="login-brand">
           <E23BrandMark size={68} className="login-brand-mark" />
-          <p className="login-eyebrow">48城 · 21,423公里 · 从深圳出发</p>
+          <p className="login-eyebrow">{IS_V2_PREVIEW ? '真实1:1 · 27,000+公里正式路线待核验' : '48城 · 21,423公里 · 从深圳出发'}</p>
           <h1 className="login-title">{BRAND.APP_NAME}</h1>
           <p className="login-subtitle">每一步，都在环游中国</p>
         </header>
+
+        <PreviewNotice />
 
         <TestModeNotice />
 

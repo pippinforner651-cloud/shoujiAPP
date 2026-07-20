@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "2.0",
+  "id": "e23-china-loop-v2",
+  "version": "2.0.0-draft.1",
+  "status": "DRAFT",
+  "scope": "CHINA",
+  "distancePolicy": "REAL_1_TO_1",
+  "declaredDistanceMeters": 27000000,
+  "startPlace": {
+    "name": "深圳北大汇丰商学院",
+    "latitude": 22.599,
+    "longitude": 113.973
+  },
+  "endPlace": {
+    "name": "深圳北大汇丰商学院",
+    "latitude": 22.599,
+    "longitude": 113.973
+  },
+  "nodes": [],
+  "segments": [],
+  "provenance": {
+    "measurementMethod": "UNSELECTED",
+    "sources": [],
+    "auditedAt": null
+  },
+  "auditNote": "未形成正式路线：当前文件仅用于锁定V2结构和1:1规则，不包含已核验的27,000+公里道路几何，也不能绑定正式活动。"
+}

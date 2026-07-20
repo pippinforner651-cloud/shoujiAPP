@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../services/db.js';
 
 interface SyncBody {
@@ -59,14 +60,13 @@ export function syncRoutes(app: FastifyInstance, _opts: unknown, done: () => voi
               id: act.id,
               userId: user_id,
               source: act.source || 'manual',
-              activityType: act.activity_type || 'running',
-              distanceKm: act.distance_km,
-              durationSec: act.duration_sec,
-              paceSec: pace,
+              sportType: act.activity_type || 'running',
+              distanceMeters: act.distance_km * 1000,
+              durationSeconds: act.duration_sec,
+              paceSecondsPerKm: pace,
               calories: act.calories,
               startTime: new Date(act.start_time),
-              gpsTrack: act.gps_track || undefined,
-              note: act.note,
+              routeData: act.gps_track === undefined ? undefined : act.gps_track as Prisma.InputJsonValue,
             },
           });
           uploaded++;
@@ -90,12 +90,12 @@ export function syncRoutes(app: FastifyInstance, _opts: unknown, done: () => voi
         id: a.id,
         user_id: a.userId,
         source: a.source,
-        distance_km: a.distanceKm,
-        duration_sec: a.durationSec,
-        pace_sec: a.paceSec,
+        distance_km: a.distanceMeters / 1000,
+        duration_sec: a.durationSeconds,
+        pace_sec: a.paceSecondsPerKm,
         calories: a.calories,
         start_time: a.startTime,
-        note: a.note,
+        note: null,
         created_at: a.createdAt,
       }));
     }
@@ -103,8 +103,8 @@ export function syncRoutes(app: FastifyInstance, _opts: unknown, done: () => voi
     // 4. 排行榜排名
     const allStats = await prisma.activity.groupBy({
       by: ['userId'],
-      _sum: { distanceKm: true },
-      orderBy: { _sum: { distanceKm: 'desc' } },
+      _sum: { distanceMeters: true },
+      orderBy: { _sum: { distanceMeters: 'desc' } },
     });
     const rank = allStats.findIndex((s) => s.userId === user_id) + 1;
 
@@ -121,7 +121,7 @@ export function syncRoutes(app: FastifyInstance, _opts: unknown, done: () => voi
 
     // 6. 计算总虚拟公里
     const myStats = allStats.find((s) => s.userId === user_id);
-    const totalVirtualKm = Math.round((myStats?._sum.distanceKm || 0) * 10 * 100) / 100;
+    const totalVirtualKm = Math.round(((myStats?._sum.distanceMeters || 0) / 1000) * 10 * 100) / 100;
 
     return reply.send({
       uploaded,

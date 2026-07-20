@@ -49,7 +49,7 @@ server.setErrorHandler((error: FastifyError, _request: FastifyRequest, reply: Fa
   }
 
   // 不打印完整错误详情到日志
-  request.log.warn({ statusCode, path: _request.url }, 'Request error');
+  _request.log.warn({ statusCode, path: _request.url }, 'Request error');
   reply.status(statusCode).send(response);
 });
 

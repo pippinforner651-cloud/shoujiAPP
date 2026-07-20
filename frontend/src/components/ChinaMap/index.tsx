@@ -80,6 +80,7 @@ export default function ChinaMap({ className = '', height, mode = 'personal', gl
   const virtualKm = useProgressStore((s) => s.info.virtualKm);
   const globalVirtualKm = useGlobalStore((s) => s.progress.averageVirtualKm);
   const allRunners = useGlobalStore((s) => s.progress.allRunners);
+  const globalStatus = useGlobalStore((s) => s.status);
 
   useEffect(() => {
     try {
@@ -126,6 +127,10 @@ export default function ChinaMap({ className = '', height, mode = 'personal', gl
     } else {
       // ===== 全民模式：绿色跑者 + 路线高亮 =====
       const base = buildBaseMapOption();
+      if (globalStatus !== 'ready') {
+        setOption(base);
+        return;
+      }
       // 隐藏个人跑者
       const baseSeries = (base.series as object[]).map((s, i) => {
         if (i === 1) return { ...(s as object), data: [], label: { show: false } };
@@ -168,7 +173,7 @@ export default function ChinaMap({ className = '', height, mode = 'personal', gl
 
       setOption({ ...base, series: [...baseSeries, ...globalRunnerSeries, ...routeSeries] });
     }
-  }, [mapRegistered, mode, virtualKm, globalVirtualKm, allRunners]);
+  }, [mapRegistered, mode, virtualKm, globalVirtualKm, allRunners, globalStatus]);
 
   useEffect(() => {
     const handleResize = () => chartRef.current?.getEchartsInstance()?.resize();

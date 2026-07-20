@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../services/db.js';
 
 const VALID_EVENTS = ['login', 'open_map', 'run', 'share', 'invite', 'unlock_city'];
 
 export function eventRoutes(app: FastifyInstance, _opts: unknown, done: () => void) {
   // POST /v1/events/track - 记录用户事件
-  app.post<{ Body: { user_id: string; event_type: string; metadata?: Record<string, unknown> } }>(
+  app.post<{ Body: { user_id: string; event_type: string; metadata?: Prisma.InputJsonValue } }>(
     '/track', async (req, reply) => {
       const { user_id, event_type, metadata } = req.body;
       if (!user_id || !event_type) return reply.status(400).send({ error: 'user_id and event_type required' });

@@ -1,3 +1,5 @@
+import { APP_VERSION_LABEL, IS_V2_PREVIEW } from './buildVariant';
+
 /**
  * E23跑起来 — 品牌文案包 V1.0
  *
@@ -14,14 +16,14 @@ export const BRAND = {
   /** 核心口号 */
   SLOGAN: '跑起来，看见中国',
   /** 版本号 */
-  VERSION: 'V1.0.1',
+  VERSION: APP_VERSION_LABEL,
   /** 品牌精神 */
   SPIRIT: ['真实', '坚持', '探索', '抵达'],
 
   /* ======= 启动页 ======= */
   SPLASH: {
     main: '每一步，都在环游中国',
-    bottom: '48城 · 21,423公里 · 1:10虚拟推进',
+    bottom: IS_V2_PREVIEW ? '真实1:1 · 27,000+公里正式路线待核验' : '48城 · 21,423公里 · 1:10虚拟推进',
   },
 
   /* ======= 登录/注册 ======= */
@@ -54,7 +56,7 @@ export const BRAND = {
     wechatCancel: '取消',
     wechatConfirm: '继续测试',
     agreementText: '我已阅读并同意《用户协议》和《隐私政策》',
-    footerVersion: 'E23跑起来 V1.0.1',
+    footerVersion: `E23跑起来 ${APP_VERSION_LABEL}`,
     footerTest: '当前为内部测试版本',
   },
 

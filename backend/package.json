@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "test": "node --import tsx --test src/**/*.test.ts",
     "build": "tsc",
+    "db:validate": "prisma validate",
     "start": "node dist/server.js",
     "db:migrate": "prisma migrate dev --name init",
     "db:push": "prisma db push",

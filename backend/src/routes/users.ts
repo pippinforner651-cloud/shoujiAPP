@@ -49,13 +49,13 @@ export function userRoutes(app: FastifyInstance, _opts: unknown, done: () => voi
     // 实时统计
     const stats = await prisma.activity.aggregate({
       where: { userId: id },
-      _sum: { distanceKm: true },
+      _sum: { distanceMeters: true },
       _count: true,
     });
 
     return reply.send({
       ...user,
-      totalDistanceKm: stats._sum.distanceKm || 0,
+      totalDistanceKm: (stats._sum.distanceMeters || 0) / 1000,
       runCount: stats._count,
     });
   });
