@@ -2,6 +2,7 @@
 import type { SportDataProvider } from './types';
 import { webGpsProvider } from './webGps';
 import { androidGpsProvider } from './androidGps';
+import { nativeGpsProvider } from './nativeGps';
 
 /** 手动补录：非流式来源，入口在跑步页 manual 表单 */
 export const manualProvider: SportDataProvider = {
@@ -29,6 +30,7 @@ export const joyrunProvider: SportDataProvider = {
 };
 
 export const PROVIDERS: SportDataProvider[] = [
+  nativeGpsProvider,
   androidGpsProvider,
   webGpsProvider,
   manualProvider,
@@ -38,6 +40,7 @@ export const PROVIDERS: SportDataProvider[] = [
 
 /** 取当前环境最优的流式 GPS 适配器：原生容器 → 浏览器 */
 export function pickGpsProvider(): SportDataProvider {
+  if (nativeGpsProvider.isAvailable()) return nativeGpsProvider;
   if (androidGpsProvider.isAvailable()) return androidGpsProvider;
   return webGpsProvider;
 }

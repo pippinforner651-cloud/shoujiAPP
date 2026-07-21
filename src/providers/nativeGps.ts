@@ -4,12 +4,15 @@
 // 所有GPS采集、轨迹持久化、活动管理在原生层完成
 // React层仅负责展示和用户操作
 // ============================================================
+import { Capacitor } from '@capacitor/core';
 import type { SportDataProvider } from './types';
 
-// 旧版本androidGpsProvider（保持向后兼容）
-export const androidGpsProvider: SportDataProvider = {
-  key: 'android-gps',
-  name: 'Android 原生 GPS（旧）',
-  status: 'unavailable',
-  isAvailable() { return false; },
+export const nativeGpsProvider: SportDataProvider = {
+  key: 'native-gps',
+  name: 'E23 GPS（前台服务）',
+  status: 'ready',
+
+  isAvailable() {
+    return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('GpsRun');
+  },
 };

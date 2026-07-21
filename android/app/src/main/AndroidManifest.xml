@@ -24,6 +24,12 @@
 
         </activity>
 
+        <!-- E23 GPS后台跑步前台服务（type: location） -->
+        <service
+            android:name=".run.GpsRunService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -36,8 +42,21 @@
     </application>
 
     <!-- Permissions -->
-
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Android 13 (API 33+) 通知权限 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Android 10+ 前台定位服务类型声明 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- 后台定位（分步授权，仅在明确需要时索取） -->
+    <!-- ACCESS_BACKGROUND_LOCATION 不由本文件静态声明，由运行时按需请求 -->
+
+    <!-- 防止系统深度睡眠时杀死Service -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 </manifest>
+
