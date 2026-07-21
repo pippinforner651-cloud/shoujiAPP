@@ -1,6 +1,7 @@
 package com.e23running.app.kimi.preview.run;
 
 import android.content.Intent;
+import android.os.Build;
 import android.util.Log;
 
 import com.getcapacitor.JSObject;
