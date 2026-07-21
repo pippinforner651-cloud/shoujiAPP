@@ -140,6 +140,8 @@ export interface DiagnosticsResponse {
   locationRejectedCount?: number;
   sqliteWriteOk?: number;
   sqliteWriteFailed?: number;
+  firstFixReceived?: boolean;
+  distMode?: number;
 }
 
 // 注册插件

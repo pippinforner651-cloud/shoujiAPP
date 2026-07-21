@@ -348,6 +348,8 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
             ret.put("screenOff", svc.isScreenOff());
             ret.put("appBackgrounded", svc.isAppBackgrounded());
             ret.put("lastError", svc.getLastError() != null ? svc.getLastError() : "");
+            ret.put("firstFixReceived", svc.hasFirstFix());
+            ret.put("distMode", svc.getDistMode());
 
             // 诊断事件计数
             GpsRunService.Diagnostician diag = svc.getDiagnostics();

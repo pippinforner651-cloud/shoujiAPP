@@ -14,8 +14,9 @@ export const CONFIG = {
   ROUTE_STATUS: 'DRAFT' as 'DRAFT' | 'RELEASED',
   // 未来地图服务（高德等）接入预留
   MAP_PROVIDER: import.meta.env.VITE_MAP_PROVIDER ?? 'static-pack',
-  // 版本标识：预览版页面明示，正式版单独迁移确认
+  // 版本标识
   APP_EDITION: 'Kimi预览版',
+  APP_PHASE: 'Phase 1.3 GPS Fix',
   // 构建时由 GitHub Actions 注入（本地开发为 local）
   COMMIT_SHA: (import.meta.env.VITE_COMMIT_SHA ?? 'local').slice(0, 7),
 };

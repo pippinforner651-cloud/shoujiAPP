@@ -53,8 +53,16 @@ public class GpsRunService extends Service implements LocationListener {
     private static final int NOTIFICATION_ID = 1001;
 
     // Location quality thresholds
-    private static final float ACCURACY_LIMIT_M = 40f;
-    private static final float MIN_POINT_DISTANCE_M = 0.5f;
+    // 分阶段精度策略：首点允许≤100m，后续要求≤50m
+    private static final float ACCURACY_FIRST_FIX_MAX = 100f;  // 首点最大允许精度
+    private static final float ACCURACY_RUNNING_MAX = 50f;     // 后续点最大允许精度
+    private static final float MIN_POINT_DISTANCE_M = 0.5f;    // 最小距离变化
+    private static final float MAX_SUSPICIOUS_SPEED = 15f;     // 可疑速度 m/s
+
+    // Distance computation mode
+    private static final int DIST_MODE_FIRST_FIX = 0;  // 首点，不累计距离
+    private static final int DIST_MODE_WARM_UP = 1;     // 精度一般，候选
+    private static final int DIST_MODE_ACCURATE = 2;    // 精度良好，正式累计
 
     // Diagnostic logging identifiers
     public static final String DIAG_SERVICE_CREATE = "SERVICE_CREATE";
@@ -110,6 +118,10 @@ public class GpsRunService extends Service implements LocationListener {
     private volatile double lastLat;
     private volatile double lastLon;
     private volatile boolean hasLastPoint;
+
+    // 首点状态机
+    private volatile boolean firstFixReceived;
+    private volatile int distMode = DIST_MODE_FIRST_FIX;
 
     private volatile int validPointCount;
     private volatile int rejectedPointCount;
@@ -514,25 +526,45 @@ public class GpsRunService extends Service implements LocationListener {
         notifyState("GPS信号丢失，请检查定位开关");
     }
 
-    // ===== 质量过滤 =====
+    // ===== 质量过滤（分阶段精度策略） =====
 
     private String validatePoint(RunState.TrackPoint point, long now) {
-        if (point.accuracy > ACCURACY_LIMIT_M) {
+        // 首点：允许≤100m精度，仅记录位置不累计距离
+        if (!firstFixReceived) {
+            if (point.accuracy <= ACCURACY_FIRST_FIX_MAX) {
+                firstFixReceived = true;
+                distMode = (point.accuracy <= ACCURACY_RUNNING_MAX) ? DIST_MODE_ACCURATE : DIST_MODE_WARM_UP;
+                lastLat = point.latitude;
+                lastLon = point.longitude;
+                hasLastPoint = true;
+                lastPointTimestamp = now;
+                // 首点接受但不累计距离
+                return null; // accepted - no rejection
+            }
+            return "first_fix_accuracy:" + point.accuracy + "(>" + ACCURACY_FIRST_FIX_MAX + ")";
+        }
+
+        // 已有首点后的精度过滤
+        float accuracyLimit = ACCURACY_RUNNING_MAX;
+        if (point.accuracy > accuracyLimit) {
             return "accuracy_too_low:" + point.accuracy;
         }
+        // 时间倒退
         if (lastPointTimestamp > 0 && point.timestampMs < lastPointTimestamp) {
             return "time_regression";
         }
+        // 重复点（0.5m内不记录）
         if (hasLastPoint) {
             double d = haversineM(lastLat, lastLon, point.latitude, point.longitude);
             if (d < MIN_POINT_DISTANCE_M) {
                 return "duplicate_point:" + String.format(Locale.US, "%.1f", d) + "m";
             }
         }
+        // 模拟定位
         if (point.mockLocation) {
             return "mock_location";
         }
-        return null;
+        return null; // valid
     }
 
     // ===== 分段管理 =====
@@ -865,4 +897,6 @@ public class GpsRunService extends Service implements LocationListener {
     public int getRejectedPointCount() { return rejectedPointCount; }
     public int getCurrentSplitIndex() { return currentSplitIndex; }
     public double getSplitDistanceM() { return splitDistanceM; }
+    public boolean hasFirstFix() { return firstFixReceived; }
+    public int getDistMode() { return distMode; }
 }
