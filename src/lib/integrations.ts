@@ -26,11 +26,11 @@ export interface IntegrationStatus {
 }
 
 export const INTEGRATIONS: IntegrationStatus[] = [
-  { key: 'wechat', name: '微信运动', desc: '同步微信步数/运动数据', connected: false, requirement: '需微信开放平台审核通过的移动应用 + 后端服务' },
-  { key: 'joyrun', name: '悦跑圈', desc: '导入悦跑圈跑步记录', connected: false, requirement: '需悦跑圈开放平台商务合作授权' },
-  { key: 'garmin', name: '佳明手表', desc: '实时同步手表跑步数据', connected: false, requirement: '需注册 Garmin Health API 开发者' },
-  { key: 'huawei', name: '华为运动健康', desc: '同步华为手表/手环数据', connected: false, requirement: '需华为运动健康开放平台申请' },
-  { key: 'apple', name: 'Apple Health', desc: '同步苹果手表数据', connected: false, requirement: '需 iOS 原生端 HealthKit 授权' },
+  { key: 'joyrun', name: '悦跑圈', desc: '官方授权自动同步 · 轨迹/凭证导入（点我展开）', connected: true, requirement: '推荐官方 OAuth 一键授权同步；也可用 GPX/TCX 轨迹导入或凭证补录' },
+  { key: 'huawei', name: '华为运动健康', desc: '官方授权自动同步（点我展开）', connected: true, requirement: '华为运动健康开放平台 OAuth2.0：授权一次，一键同步；凭据由班级统一申请' },
+  { key: 'garmin', name: '佳明手表', desc: '官方授权自动同步（点我展开）', connected: true, requirement: 'Garmin Health API（OAuth 1.0a）：授权一次，一键同步；凭据由班级统一申请' },
+  { key: 'wechat', name: '微信运动', desc: '微信步数/运动数据', connected: false, requirement: '如实说明：微信运动数据仅支持在「微信小程序」内授权获取，外部 App 无法直接授权；需开发配套小程序后方可接入' },
+  { key: 'apple', name: 'Apple Health', desc: '苹果手表/健康数据', connected: false, requirement: '如实说明：Apple Health 只能在 iPhone 真机上系统级授权（HealthKit），无网页授权方式；需 iOS 原生打包后按系统弹窗授权' },
 ];
 
 // 未来数据源的统一入口：后端就绪后，从这里拉取外部跑步数据写入 store.records

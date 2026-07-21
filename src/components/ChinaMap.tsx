@@ -66,7 +66,7 @@ export default function ChinaMap({ pack, progressKm, onSelectNode, onRunnerClick
 
   useEffect(() => {
     baseBox.current = bounds;
-    setViewBox(bounds);
+    queueMicrotask(() => setViewBox(bounds));
   }, [bounds]);
 
   // SVG 使用默认 preserveAspectRatio(meet)，内容可能上下/左右留边，

@@ -1,0 +1,81 @@
+# E23跑起来 · 后端 CI：npm ci + 类型检查 + lint + 真实 PostgreSQL 迁移与集成测试 + Docker 构建
+# 仅 Kimi 独立交付分支触发，不影响 Codex 主线；不使用任何生产数据库
+name: Kimi Backend CI
+
+on:
+  push:
+    branches: [kimi/e23-v2-product]
+    paths: ['backend/**', '.github/workflows/kimi-backend-ci.yml']
+  pull_request:
+    branches: [kimi/e23-v2-product]
+    paths: ['backend/**']
+  workflow_dispatch:
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: e23
+          POSTGRES_PASSWORD: e23ci
+          POSTGRES_DB: e23
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U e23"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # 同一 CI PostgreSQL service：Prisma CLI 读 DATABASE_URL，测试进程读 TEST_DATABASE_URL（绝不启动 embedded-postgres）
+      DATABASE_URL: postgresql://e23:e23ci@localhost:5432/e23
+      TEST_DATABASE_URL: postgresql://e23:e23ci@localhost:5432/e23
+      JWT_SECRET: ci-jwt-secret-not-for-production
+      TOKEN_ENCRYPTION_KEY: ci-token-key-not-for-production
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: 安装依赖（npm ci，锁定版本）
+        working-directory: backend
+        run: npm ci
+
+      - name: 生成 Prisma Client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: TypeScript 类型检查
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: ESLint 代码检查
+        working-directory: backend
+        run: npm run lint
+
+      - name: Prisma 数据库迁移（CI 专用 PG，不涉生产）
+        working-directory: backend
+        run: npx prisma migrate deploy || npx prisma db push --skip-generate
+
+      - name: 单元测试与 API 集成测试（npm run test:ci · CI PostgreSQL service，不启动 embedded-postgres）
+        working-directory: backend
+        run: npm run test:ci
+
+      - name: 生产构建
+        working-directory: backend
+        run: npm run build
+
+      - name: Docker 镜像构建验证
+        working-directory: backend
+        run: docker build -t e23-backend:ci .

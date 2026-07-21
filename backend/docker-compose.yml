@@ -1,0 +1,67 @@
+# E23跑起来 后端一键编排：PostgreSQL 16 + 后端 API
+# 用法：docker compose up -d --build
+# 首次启动后执行种子：docker compose exec backend npm run seed
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: e23-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-e23}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-e23local}
+      POSTGRES_DB: ${POSTGRES_DB:-e23}
+    volumes:
+      - e23-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-e23}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: e23-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-e23}:${POSTGRES_PASSWORD:-e23local}@postgres:5432/${POSTGRES_DB:-e23}
+      JWT_SECRET: ${JWT_SECRET:?必须设置JWT_SECRET}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?必须设置TOKEN_ENCRYPTION_KEY}
+      PORT: 8787
+      NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:?生产必须显式配置CORS白名单}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      CALLBACK_ALLOWED_HOSTS: ${CALLBACK_ALLOWED_HOSTS:-}
+      FRONTEND_URL: ${FRONTEND_URL:-}
+      JOYRUN_CLIENT_ID: ${JOYRUN_CLIENT_ID:-}
+      JOYRUN_CLIENT_SECRET: ${JOYRUN_CLIENT_SECRET:-}
+      JOYRUN_REDIRECT_URI: ${JOYRUN_REDIRECT_URI:-}
+      MINIPROGRAM_API_KEY: ${MINIPROGRAM_API_KEY:-}
+    ports:
+      - "${BACKEND_PORT:-8787}:8787"
+    command: sh -c "npx prisma migrate deploy || npx prisma db push --skip-generate; node dist/src/server.js"
+
+  # HTTPS 反向代理（Caddy 自动签发证书）：docker compose --profile https up -d
+  caddy:
+    image: caddy:2-alpine
+    container_name: e23-caddy
+    restart: unless-stopped
+    profiles: ["https"]
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - e23-caddy-data:/data
+
+volumes:
+  e23-pgdata:
+  e23-caddy-data:

@@ -1,0 +1,206 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  pending
+  approved
+  rejected
+}
+
+enum UserRole {
+  member
+  admin
+}
+
+enum ActivityStatus {
+  pending
+  valid
+  rejected
+}
+
+enum ActivitySource {
+  gps
+  manual
+  watch
+  joyrun
+  wechat
+}
+
+enum AuditAction {
+  USER_REGISTERED
+  USER_APPROVED
+  USER_REJECTED
+  ACTIVITY_CREATED
+  ACTIVITY_VALIDATED
+  ACTIVITY_PENDING
+  ACTIVITY_REJECTED
+  ACTIVITY_DELETED
+  PROGRESS_RECOMPUTED
+  INVITE_CREATED
+  PROVIDER_CONNECTED
+  PROVIDER_SYNCED
+  PROVIDER_DISCONNECTED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  phone        String     @unique
+  nickname     String
+  avatarUrl    String?
+  passwordHash String
+  role         UserRole   @default(member)
+  status       UserStatus @default(pending)
+  inviteCodeId String?
+  inviteCode   InviteCode? @relation(fields: [inviteCodeId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  activities   Activity[]
+  auditLogs    AuditLog[]
+  externalConnections ExternalConnection[]
+}
+
+model InviteCode {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  note      String?
+  maxUses   Int       @default(1)
+  usedCount Int       @default(0)
+  expiresAt DateTime?
+  createdBy String?
+  createdAt DateTime  @default(now())
+
+  users     User[]
+}
+
+model Activity {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  clientId      String
+  source        ActivitySource
+  status        ActivityStatus @default(pending)
+  distanceM     Int
+  durationSec   Int
+  avgPaceSec    Int
+  startedAt     DateTime
+  endedAt       DateTime
+  rejectReason  String?
+  createdAt     DateTime       @default(now())
+
+  trackPoints   ActivityTrackPoint[]
+  evidence      ManualActivityEvidence?
+
+  @@unique([userId, clientId])
+  @@index([userId, status])
+  @@index([startedAt])
+}
+
+model ActivityTrackPoint {
+  id         String   @id @default(cuid())
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  seq        Int
+  lat        Float
+  lon        Float
+  accuracyM  Float?
+  timestamp  DateTime
+
+  @@index([activityId, seq])
+}
+
+model ManualActivityEvidence {
+  id         String   @id @default(cuid())
+  activityId String   @unique
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  note       String
+  imageUrl   String?
+  createdAt  DateTime @default(now())
+}
+
+model RouteVersion {
+  id          String   @id @default(cuid())
+  packId      String
+  version     String
+  status      String   @default("DRAFT")
+  totalKm     Float
+  nodeCount   Int
+  checksum    String?
+  createdAt   DateTime @default(now())
+
+  progresses  RouteProgress[]
+
+  @@unique([packId, version])
+}
+
+model RouteProgress {
+  id             String       @id @default(cuid())
+  routeVersionId String
+  routeVersion   RouteVersion @relation(fields: [routeVersionId], references: [id])
+  userId         String
+  totalM         Int          @default(0)
+  activityCount  Int          @default(0)
+  lastActivityAt DateTime?
+  recomputedAt   DateTime     @default(now())
+
+  @@unique([routeVersionId, userId])
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  actorId   String?
+  actor     User?       @relation(fields: [actorId], references: [id])
+  action    AuditAction
+  targetId  String?
+  detail    String?
+  createdAt DateTime    @default(now())
+
+  @@index([action, createdAt])
+}
+
+// 第三方运动平台授权连接（悦跑圈/华为/佳明等官方 OAuth，凭据由班级申请）
+// tokenSecret 用于 OAuth 1.0a 平台（佳明）的 token secret
+model ExternalConnection {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  provider     String    // joyrun | huawei | garmin
+  openId       String    // 平台侧用户标识
+  accessToken  String
+  tokenSecret  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  lastSyncAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, provider])
+}
+
+// OAuth state 一次性票据（防重放）：jti 唯一，回调消费后标记 usedAt
+model OAuthState {
+  id        String    @id // jti
+  userId    String
+  provider  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// 平台接入状态（真实进度，管理员凭真实事件推进，全部留痕）
+model IntegrationState {
+  provider         String   @id // joyrun | huawei | garmin | wechat | apple
+  stage            String   // 8级状态：adapter_not_started/adapter_implemented/mock_verified/sandbox_connected/production_credentials_ready/production_connected/pilot_verified/generally_available
+  credentialStatus String   @default("not_applied") // not_applied/applied_pending/sandbox_issued/production_issued
+  sandboxStatus    String   @default("not_connected")
+  productionStatus String   @default("not_connected")
+  note             String?
+  updatedBy        String?
+  updatedAt        DateTime @updatedAt
+}

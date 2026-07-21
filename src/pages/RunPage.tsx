@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { store, fmtPace, fmtDuration } from '../lib/store';
+import { isApiEnabled } from '../api/client';
+import { uploadActivity } from '../api/sync';
+import { pickGpsProvider } from '../providers';
+import type { TrackPointPayload } from '../api/types';
 
 type Phase = 'idle' | 'running' | 'paused' | 'done' | 'manual';
+
+function newClientId() {
+  return `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 function haversine(a: [number, number], b: [number, number]) {
   const R = 6371000, rad = Math.PI / 180;
@@ -25,7 +33,9 @@ export default function RunPage() {
 
   const lastFix = useRef<{ coord: [number, number]; t: number } | null>(null);
   const trail = useRef<Array<{ t: number; m: number }>>([]);
-  const watchId = useRef<number | null>(null);
+  const geoTrail = useRef<TrackPointPayload[]>([]); // 原始GPS轨迹（上传后端用）
+  const startTs = useRef<number>(0);
+  const [syncMsg, setSyncMsg] = useState('');
 
   // 计时
   useEffect(() => {
@@ -46,18 +56,29 @@ export default function RunPage() {
     return () => clearInterval(iv);
   }, [phase, mode]);
 
-  // GPS
+  // GPS：经适配器层（原生容器=android-gps，浏览器=web-gps）
   useEffect(() => {
-    if (phase !== 'running' || mode !== 'gps' || !('geolocation' in navigator)) return;
-    watchId.current = navigator.geolocation.watchPosition(
-      (p) => {
+    if (phase !== 'running' || mode !== 'gps') return;
+    let alive = true;
+    let stopFn: (() => void) | undefined;
+    queueMicrotask(() => {
+      if (!alive) return;
+      const provider = pickGpsProvider();
+      if (!provider.isAvailable() || !provider.start) {
+        setGpsOK(false);
+        setGpsMsg('当前环境不支持定位，请改用「室内/演示」模式');
+        setMode('sim');
+        return;
+      }
+      provider.start(
+      (fix) => {
         setGpsOK(true);
         setGpsMsg('');
-        if (p.coords.accuracy > 40) return; // 过滤漂移
-        const fix: [number, number] = [p.coords.longitude, p.coords.latitude];
-        const now = Date.now();
+        const coord: [number, number] = [fix.lon, fix.lat];
+        const now = fix.timestamp;
+        geoTrail.current.push({ lon: fix.lon, lat: fix.lat, accuracyM: fix.accuracyM, timestamp: new Date(now).toISOString() });
         if (lastFix.current) {
-          const d = haversine(lastFix.current.coord, fix);
+          const d = haversine(lastFix.current.coord, coord);
           if (d > 0.5 && d < 100) {
             setMeters((m) => {
               const nm = m + d;
@@ -66,19 +87,18 @@ export default function RunPage() {
             });
           }
         }
-        lastFix.current = { coord: fix, t: now };
+        lastFix.current = { coord, t: now };
       },
-      (err) => {
+      (msg) => {
         // 权限被拒绝/不可用时给出明确提示，不静默降级
         setGpsOK(false);
-        setGpsMsg(err.code === 1
-          ? '定位权限被拒绝：请在浏览器/系统设置中允许定位后重试，或改用「室内/演示」模式'
-          : '暂时无法获取定位（信号弱或超时）：请检查GPS信号，或改用「室内/演示」模式');
+        setGpsMsg(`${msg}，或改用「室内/演示」模式`);
         setMode('sim');
       },
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 8000 }
-    );
-    return () => { if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current); };
+      );
+      stopFn = () => provider.stop?.();
+    });
+    return () => { alive = false; stopFn?.(); };
   }, [phase, mode]);
 
   // 实时配速：最近 20 秒
@@ -102,16 +122,39 @@ export default function RunPage() {
   const kcal = Math.round(km * 62);
 
   const start = () => {
-    trail.current = []; lastFix.current = null;
+    trail.current = []; lastFix.current = null; geoTrail.current = [];
+    startTs.current = Date.now();
+    setSyncMsg('');
     setSec(0); setMeters(0); setCurPace(0);
     setPhase('running');
   };
   const finish = () => {
     if (km >= 0.05) {
+      const id = newClientId();
+      const startedAt = startTs.current || Date.now() - sec * 1000;
       store.addRecord({
-        id: `r${Date.now()}`, ts: Date.now(), km: Math.round(km * 100) / 100,
+        id, ts: Date.now(), km: Math.round(km * 100) / 100,
         durationSec: sec, avgPaceSec: Math.round(avgPace), source: mode,
+        startedAt, syncState: 'local',
       });
+      // 后端已接入时自动上传；离线则进入待同步队列
+      if (isApiEnabled() && store.user?.authMode === 'server') {
+        const distM = Math.round(km * 1000);
+        uploadActivity({
+          clientId: id,
+          source: 'gps',
+          distanceM: distM,
+          durationSec: sec,
+          startedAt: new Date(startedAt).toISOString(),
+          endedAt: new Date().toISOString(),
+          trackPoints: geoTrail.current.slice(0, 50000),
+        }).then((r) => {
+          store.updateRecordSync(id, r === 'ok' ? 'ok' : r === 'rejected' ? 'rejected' : 'queued');
+          setSyncMsg(r === 'ok' ? '✅ 已上传服务器并完成校验' : r === 'rejected' ? '❌ 服务端校验未通过（详见我的记录）' : '📥 已存入待同步队列（离线或待审批）');
+        });
+      } else {
+        setSyncMsg('本机模式：记录已保存在本机（未连接班级后端）');
+      }
     }
     setPhase('done');
   };
@@ -121,11 +164,30 @@ export default function RunPage() {
     const min = parseFloat(mMin);
     if (!km || km <= 0 || !min || min <= 0) return;
     const ts = new Date(`${mDate}T12:00:00`).getTime();
+    const start = isNaN(ts) ? Date.now() - Math.round(min * 60) * 1000 : ts - Math.round(min * 60) * 1000;
+    const id = newClientId();
     store.addRecord({
-      id: `r${Date.now()}`, ts: isNaN(ts) ? Date.now() : ts,
+      id, ts: isNaN(ts) ? Date.now() : ts,
       km: Math.round(km * 100) / 100, durationSec: Math.round(min * 60),
       avgPaceSec: Math.round((min * 60) / km), source: 'manual',
+      startedAt: start, syncState: 'local',
     });
+    if (isApiEnabled() && store.user?.authMode === 'server') {
+      uploadActivity({
+        clientId: id,
+        source: 'manual',
+        distanceM: Math.round(km * 1000),
+        durationSec: Math.round(min * 60),
+        startedAt: new Date(start).toISOString(),
+        endedAt: new Date(start + Math.round(min * 60) * 1000).toISOString(),
+        evidenceNote: 'App手动补录',
+      }).then((r) => {
+        store.updateRecordSync(id, r === 'ok' ? 'ok' : r === 'rejected' ? 'rejected' : 'queued');
+        setSyncMsg(r === 'ok' ? '✅ 已提交，手动补录待管理员审核后计入' : '📥 已存入待同步队列（离线或待审批）');
+      });
+    } else {
+      setSyncMsg('本机模式：记录已保存在本机（未连接班级后端）');
+    }
     setMKm(''); setMMin('');
     setPhase('done');
   };
@@ -167,6 +229,7 @@ export default function RunPage() {
           <Row k="平均配速" v={fmtPace(avgPace)} />
           <Row k="消耗" v={`${kcal} 千卡`} />
         </div>
+        {syncMsg && <div className="mt-3 text-xs text-slate-300 text-center max-w-xs">{syncMsg}</div>}
         <button onClick={() => setPhase('idle')} className="mt-8 w-full max-w-xs py-3.5 rounded-full bg-orange-500 font-bold active:bg-orange-600">返回</button>
       </div>
     );

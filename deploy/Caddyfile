@@ -1,0 +1,10 @@
+# E23 后端 HTTPS 反代：把 api.你的域名 替换为真实域名后，
+# Caddy 自动申请并续期 Let's Encrypt 证书（需 80/443 公网可达 + DNS 已解析）
+api.你的域名 {
+	reverse_proxy backend:8787
+	encode gzip
+	log {
+		output stdout
+		format json
+	}
+}

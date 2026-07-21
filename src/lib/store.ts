@@ -7,17 +7,23 @@ export interface UserProfile {
   wxName: string;        // 初始昵称来源（正式版为微信昵称；当前为测试登录输入）
   color: string;         // 头像底色占位（真实头像需微信授权后替换为URL）
   avatarUrl?: string;    // 自定义头像
-  phone?: string;        // 测试登录手机号
+  phone?: string;        // 登录手机号
   joinedAt: number;
+  authMode: 'test' | 'server';   // test=本机测试登录；server=后端账号
+  serverId?: string;             // 后端用户ID
+  serverStatus?: 'pending' | 'approved' | 'rejected'; // 后端审批状态
+  serverRole?: 'member' | 'admin';
 }
 
 export interface RunRecord {
-  id: string;
+  id: string;            // 同时作为后端幂等键 clientId
   ts: number;            // 完成时间
   km: number;
   durationSec: number;
   avgPaceSec: number;    // 秒/公里
-  source: 'gps' | 'sim' | 'manual' | 'import';
+  source: 'gps' | 'sim' | 'manual' | 'import' | 'joyrun';
+  startedAt?: number;    // 开始时间（上传后端需要）
+  syncState?: 'local' | 'queued' | 'ok' | 'rejected'; // 与后端的同步状态
 }
 
 const USER_KEY = 'e23_user_v1';
@@ -51,14 +57,50 @@ class Store {
 
   login(nickname: string, phone?: string) {
     const rnd = Math.floor(Math.random() * AVATAR_COLORS.length);
-    this.user = { nickname, wxName: nickname, color: AVATAR_COLORS[rnd], phone, joinedAt: Date.now() };
+    this.user = { nickname, wxName: nickname, color: AVATAR_COLORS[rnd], phone, joinedAt: Date.now(), authMode: 'test' };
     localStorage.setItem(USER_KEY, JSON.stringify(this.user));
+    this.emit();
+  }
+
+  /** 后端账号登录（AuthAPI 成功后调用，token 由 api/client 保管） */
+  loginBackend(u: { id: string; nickname: string; avatarUrl: string | null; phone: string; role: 'member' | 'admin'; status: 'pending' | 'approved' | 'rejected' }) {
+    const rnd = Math.floor(Math.random() * AVATAR_COLORS.length);
+    this.user = {
+      nickname: u.nickname,
+      wxName: u.nickname,
+      color: AVATAR_COLORS[rnd],
+      avatarUrl: u.avatarUrl ?? undefined,
+      phone: u.phone,
+      joinedAt: Date.now(),
+      authMode: 'server',
+      serverId: u.id,
+      serverStatus: u.status,
+      serverRole: u.role,
+    };
+    localStorage.setItem(USER_KEY, JSON.stringify(this.user));
+    this.emit();
+  }
+
+  setServerStatus(status: 'pending' | 'approved' | 'rejected') {
+    if (!this.user) return;
+    this.user.serverStatus = status;
+    localStorage.setItem(USER_KEY, JSON.stringify(this.user));
+    this.emit();
+  }
+
+  updateRecordSync(id: string, state: RunRecord['syncState']) {
+    const r = this.records.find((x) => x.id === id);
+    if (!r) return;
+    r.syncState = state;
+    localStorage.setItem(RECORDS_KEY, JSON.stringify(this.records.slice(0, 500)));
     this.emit();
   }
 
   logout() {
     this.user = null;
     localStorage.removeItem(USER_KEY);
+    // 后端 token 一并清除（动态 import 避免循环依赖）
+    import('../api/client').then((m) => m.setToken(null)).catch(() => {});
     this.emit();
   }
 
