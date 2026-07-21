@@ -40,6 +40,12 @@ export interface GpsRunPlugin {
     limit?: number;
     offset?: number;
   }): Promise<{ points: string; total: number }>;
+
+  /** 获取GPS诊断信息 */
+  getDiagnostics(): Promise<DiagnosticsResponse>;
+
+  /** 导出诊断日志文本 */
+  exportDiagnosticLog(): Promise<{ log: string }>;
 }
 
 // ===== 类型定义 =====
@@ -107,6 +113,33 @@ export interface RunSummaryResponse {
   mockPoints: number;
   highSpeedPoints: number;
   serverUploadState: string;
+}
+
+export interface DiagnosticsResponse {
+  phoneBrand: string;
+  phoneModel: string;
+  androidVersion: string;
+  sdkVersion: number;
+  serviceRunning: boolean;
+  runState?: number;
+  activityId?: string;
+  startTimeMs?: number;
+  totalDistanceM?: number;
+  lastLocationCallbackMs?: number;
+  lastSqliteWriteMs?: number;
+  lastNotificationUpdateMs?: number;
+  lastAccuracy?: number;
+  validPoints?: number;
+  rejectedPoints?: number;
+  screenOff?: boolean;
+  appBackgrounded?: boolean;
+  lastError?: string;
+  diagCount?: number;
+  locationCallbackCount?: number;
+  locationAcceptedCount?: number;
+  locationRejectedCount?: number;
+  sqliteWriteOk?: number;
+  sqliteWriteFailed?: number;
 }
 
 // 注册插件

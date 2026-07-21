@@ -7,6 +7,7 @@ import { ActivityAPI, flushOutbox, getOutbox } from '../api/sync';
 import type { MyStats } from '../api/types';
 import JoyrunImport from '../components/JoyrunImport';
 import ProviderSyncPanel from '../components/ProviderSyncPanel';
+import DiagnosticPanel from '../components/DiagnosticPanel';
 
 // 路线包完整性校验值（FNV-1a，用于版本核对与回滚校验）
 function packChecksum(p: { nodes: unknown[]; totalKm: number }): string {
@@ -220,6 +221,11 @@ export default function ProfilePage() {
           ))}
           <div className="text-xs text-slate-400 px-1 pt-1">尚未实现：后台锁屏GPS · 心率 · 步频 · 海拔 · 云同步（不伪装）</div>
         </div>
+      </Section>
+
+      {/* GPS诊断 */}
+      <Section title="GPS诊断">
+        <DiagnosticPanel />
       </Section>
 
       {/* 地图包与路线状态 */}

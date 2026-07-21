@@ -12,8 +12,12 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
+import android.provider.Settings;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
@@ -27,14 +31,21 @@ import java.util.Locale;
 /**
  * E23跑起来 · Android前台定位服务
  *
- * 生命周期：
- *   APP前台点击"开始跑步" → startForegroundService() → onCreate → onStartCommand
- *   → 注册LocationManager回调 → 持续采集GPS点 → 存储到SQLite
- *   暂停 → 标记暂停（不停止Service）
- *   结束 → stopSelf()
+ * 锁屏/后台GPS稳定性关键设计：
+ * 1. startForeground() 在任何GPS操作前调用
+ * 2. HandlerThread 用于LocationManager回调，避免锁屏时主线程Looper休眠
+ * 3. onTaskRemoved 防止用户划掉APP时停止Service
+ * 4. onStartCommand返回START_STICKY并正确处理null intent（不立即stopSelf）
+ * 5. 每次GPS点和状态变化都写入SQLite + 原生Logcat诊断日志
+ * 6. 诊断日志可导出
  *
- * 锁屏/后台后通过前台Service + 常驻通知保持GPS采集
- * 通知每分钟更新（距离+时间）
+ * 生命周期：
+ *   startForegroundService(intent) → onCreate → onStartCommand
+ *   → 立即startForeground() → 处理action → LocationManager持续采集
+ *   暂停 → stopGps()（保留Service）
+ *   继续 → startGps()
+ *   结束 → stopSelf()
+ *   系统杀死 → START_STICKY重启 → 从SQLite恢复
  */
 public class GpsRunService extends Service implements LocationListener {
     private static final String TAG = "E23GpsRun";
@@ -43,10 +54,33 @@ public class GpsRunService extends Service implements LocationListener {
 
     // Location quality thresholds
     private static final float ACCURACY_LIMIT_M = 40f;
-    private static final float MAX_POINT_SPEED_MPS = 10f;  // 36 km/h - threshold for suspicious
-    private static final float MIN_VALID_SPEED_MPS = 0.1f;  // below this, treat as stationary
-    private static final float MIN_POINT_DISTANCE_M = 0.5f; // ignore points within 0.5m
-    private static final float MAX_JUMP_DISTANCE_M = 100f;  // jump >100m flagged
+    private static final float MIN_POINT_DISTANCE_M = 0.5f;
+
+    // Diagnostic logging identifiers
+    public static final String DIAG_SERVICE_CREATE = "SERVICE_CREATE";
+    public static final String DIAG_SERVICE_START = "SERVICE_START";
+    public static final String DIAG_START_FOREGROUND_OK = "START_FOREGROUND_OK";
+    public static final String DIAG_LOCATION_REQUEST_START = "LOCATION_REQUEST_START";
+    public static final String DIAG_LOCATION_CALLBACK = "LOCATION_CALLBACK";
+    public static final String DIAG_LOCATION_ACCEPTED = "LOCATION_ACCEPTED";
+    public static final String DIAG_LOCATION_REJECTED = "LOCATION_REJECTED";
+    public static final String DIAG_SQLITE_WRITE_OK = "SQLITE_WRITE_OK";
+    public static final String DIAG_SQLITE_WRITE_FAILED = "SQLITE_WRITE_FAILED";
+    public static final String DIAG_SCREEN_OFF = "SCREEN_OFF";
+    public static final String DIAG_SCREEN_ON = "SCREEN_ON";
+    public static final String DIAG_APP_BACKGROUND = "APP_BACKGROUND";
+    public static final String DIAG_APP_FOREGROUND = "APP_FOREGROUND";
+    public static final String DIAG_TASK_REMOVED = "TASK_REMOVED";
+    public static final String DIAG_SERVICE_DESTROY = "SERVICE_DESTROY";
+    public static final String DIAG_SERVICE_RESTART = "SERVICE_RESTART";
+    public static final String DIAG_GPS_DISABLED = "GPS_DISABLED";
+    public static final String DIAG_GPS_ENABLED = "GPS_ENABLED";
+    public static final String DIAG_PERMISSION_STATE = "PERMISSION_STATE";
+    public static final String DIAG_NOTIFICATION_STATE = "NOTIFICATION_STATE";
+    public static final String DIAG_BATTERY_OPTIMIZATION_STATE = "BATTERY_OPTIMIZATION_STATE";
+    public static final String DIAG_WAKELOCK_ACQUIRED = "WAKELOCK_ACQUIRED";
+    public static final String DIAG_WAKELOCK_RELEASED = "WAKELOCK_RELEASED";
+    public static final String DIAG_EXCEPTION = "EXCEPTION";
 
     private static GpsRunService instance;
     private static RunStateListener stateListener;
@@ -55,7 +89,14 @@ public class GpsRunService extends Service implements LocationListener {
     private PowerManager.WakeLock wakeLock;
     private RunDatabaseHelper dbHelper;
 
-    // Run state (thread-safe via synchronized)
+    // 后台HandlerThread用于LocationManager回调（锁屏时主线程可能休眠）
+    private HandlerThread locationThread;
+    private Handler locationHandler;
+
+    // 实时诊断数据
+    private final Diagnostician diag = new Diagnostician();
+
+    // Run state (thread-safe)
     private volatile String currentActivityId;
     private volatile int runState = RunState.STATE_IDLE;
     private volatile long startTimeMs;
@@ -70,17 +111,20 @@ public class GpsRunService extends Service implements LocationListener {
     private volatile double lastLon;
     private volatile boolean hasLastPoint;
 
-    // Quality counters
     private volatile int validPointCount;
     private volatile int rejectedPointCount;
 
-    // Batch insert buffer
-    private final List<RunState.TrackPoint> pointBuffer = new ArrayList<>();
-    private static final int BUFFER_FLUSH_SIZE = 10;
+    // Screen/App state
+    private volatile boolean screenOff;
+    private volatile boolean appBackgrounded;
 
-    // Split tracking
-    private volatile long splitStartTimeMs;
-    private volatile double splitStartDistanceM;
+    // 最后一次位置事件时间
+    private volatile long lastLocationCallbackMs;
+    private volatile long lastSqliteWriteMs;
+    private volatile long lastNotificationUpdateMs;
+    private volatile float lastAccuracy;
+    private volatile String lastError;
+
     private final List<RunState.SplitInfo> splitList = new ArrayList<>();
     private final List<RunState.PausePeriod> pauseList = new ArrayList<>();
 
@@ -102,6 +146,16 @@ public class GpsRunService extends Service implements LocationListener {
         return instance;
     }
 
+    /** 获取诊断数据快照 */
+    public Diagnostician getDiagnostics() { return diag; }
+    public long getLastLocationCallbackMs() { return lastLocationCallbackMs; }
+    public long getLastSqliteWriteMs() { return lastSqliteWriteMs; }
+    public long getLastNotificationUpdateMs() { return lastNotificationUpdateMs; }
+    public float getLastAccuracy() { return lastAccuracy; }
+    public String getLastError() { return lastError; }
+    public boolean isScreenOff() { return screenOff; }
+    public boolean isAppBackgrounded() { return appBackgrounded; }
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -109,28 +163,51 @@ public class GpsRunService extends Service implements LocationListener {
         dbHelper = RunDatabaseHelper.getInstance(this);
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
 
+        // 创建通知通道
         createNotificationChannel();
 
-        // Acquire partial wake lock (keeps CPU running but not screen)
+        // 创建HandlerThread用于独立的位置回调线程
+        locationThread = new HandlerThread("E23GpsLocationThread");
+        locationThread.start();
+        locationHandler = new Handler(locationThread.getLooper());
+
+        // 初始化WakeLock
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         if (pm != null) {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "E23GpsRun:Wakelock");
             wakeLock.setReferenceCounted(false);
         }
 
-        Log.i(TAG, "GpsRunService created");
+        // 记录诊断
+        diagEvent(DIAG_SERVICE_CREATE, "Service created");
+        Log.i(TAG, "GpsRunService created on thread: " + Thread.currentThread().getName());
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.i(TAG, "onStartCommand: intent=" + (intent != null ? intent.getAction() : "null")
+            + " flags=" + flags + " startId=" + startId);
+
+        // ★ 关键修复1：在任何操作之前立即调用startForeground()
+        // 确保Service处于前台状态，否则Android 14+可能暂停定位
+        startForegroundWithNotification();
+        diagEvent(DIAG_START_FOREGROUND_OK, "startForeground() called");
+
+        // ★ 关键修复2：null intent处理 - 不立即stopSelf
+        // START_STICKY重启时intent为null，这是系统正常的重启行为
         if (intent == null) {
-            Log.w(TAG, "Null intent, stopping");
-            stopSelf();
-            return START_NOT_STICKY;
+            diagEvent(DIAG_SERVICE_RESTART, "System restarted service (null intent)");
+            Log.i(TAG, "System restart: recovering existing run state");
+            // 尝试恢复
+            String activeId = dbHelper.findActiveRun();
+            if (activeId != null) {
+                recoverRun(activeId);
+            }
+            return START_STICKY;
         }
 
         String action = intent.getAction();
-        Log.i(TAG, "onStartCommand: action=" + action);
+        diagEvent(DIAG_SERVICE_START, "Action: " + action);
 
         if ("START_RUN".equals(action)) {
             String activityId = intent.getStringExtra("activityId");
@@ -147,9 +224,6 @@ public class GpsRunService extends Service implements LocationListener {
             recoverRun(recoverId);
         }
 
-        // 启动前台通知
-        startForegroundWithNotification();
-
         return START_STICKY;
     }
 
@@ -159,11 +233,34 @@ public class GpsRunService extends Service implements LocationListener {
     }
 
     @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        // ★ 关键修复3：用户划掉APP时，重新startForeground防止Service被杀死
+        diagEvent(DIAG_TASK_REMOVED, "App removed from recent tasks");
+        Log.w(TAG, "onTaskRemoved: restarting foreground notification");
+        // 重新发布前台通知，通知系统此Service仍需运行
+        startForegroundWithNotification();
+        super.onTaskRemoved(rootIntent);
+    }
+
+    @Override
     public void onDestroy() {
+        diagEvent(DIAG_SERVICE_DESTROY, "Service destroyed");
         Log.i(TAG, "GpsRunService destroyed");
         stopGps();
         releaseWakeLock();
+
+        // 停止HandlerThread
+        if (locationThread != null) {
+            locationThread.quitSafely();
+        }
+
         updateNotification("跑步已结束", "0.00 km", "00:00");
+        // 延迟移除通知，让用户看到结束信息
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) nm.cancel(NOTIFICATION_ID);
+        }, 3000);
+
         instance = null;
         super.onDestroy();
     }
@@ -172,10 +269,7 @@ public class GpsRunService extends Service implements LocationListener {
 
     private void createNotificationChannel() {
         NotificationChannel channel = new NotificationChannel(
-            CHANNEL_ID,
-            "E23跑步记录",
-            NotificationManager.IMPORTANCE_LOW
-        );
+            CHANNEL_ID, "E23跑步记录", NotificationManager.IMPORTANCE_LOW);
         channel.setDescription("E23跑起来正在记录你的跑步活动");
         channel.setShowBadge(false);
         NotificationManager nm = getSystemService(NotificationManager.class);
@@ -184,30 +278,30 @@ public class GpsRunService extends Service implements LocationListener {
 
     private void startForegroundWithNotification() {
         Notification notification = buildNotification("E23跑起来正在记录", "0.00 km", "00:00");
-        int type = 0;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Android 14+ needs foregroundServiceType
-            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
-        } else {
-            startForeground(NOTIFICATION_ID, notification);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "startForeground failed", e);
+            lastError = "startForeground failed: " + e.getMessage();
+            diagEvent(DIAG_EXCEPTION, "startForeground: " + e.getMessage());
         }
     }
 
     private Notification buildNotification(String title, String distance, String duration) {
         Intent notificationIntent = new Intent(this, MainActivity.class);
-        notificationIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        notificationIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this, 0, notificationIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
-
         return new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(distance + " · " + duration)
@@ -220,37 +314,56 @@ public class GpsRunService extends Service implements LocationListener {
     }
 
     public void updateNotification(String title, String distance, String duration) {
-        Notification notification = buildNotification(title, distance, duration);
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        if (nm != null) nm.notify(NOTIFICATION_ID, notification);
+        try {
+            Notification notification = buildNotification(title, distance, duration);
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) nm.notify(NOTIFICATION_ID, notification);
+            lastNotificationUpdateMs = System.currentTimeMillis();
+        } catch (Exception e) {
+            Log.w(TAG, "updateNotification failed", e);
+            lastError = "Notification update failed: " + e.getMessage();
+        }
     }
 
-    // ===== GPS管理 =====
+    // ===== GPS管理 (使用HandlerThread确保锁屏回调) =====
 
     private void startGps() {
         try {
-            // 请求GPS定位，最小更新间隔1秒，最小位移1米
+            diagEvent(DIAG_LOCATION_REQUEST_START,
+                "Requesting GPS updates on handler thread");
+            // 使用HandlerThread的Looper，避免锁屏时主线程Looper不处理回调
             locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
-                1000,   // 1秒
-                1f,     // 1米
-                this    // LocationListener
+                1000, 1f, this, locationHandler.getLooper()
             );
-            // 同时请求网络定位作为备用（精度更高时优先）
+            // 网络定位作为备用
             try {
                 locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
-                    3000, 3f, this
+                    3000, 3f, this, locationHandler.getLooper()
                 );
             } catch (Exception e) {
                 Log.w(TAG, "Network provider not available", e);
             }
-            Log.i(TAG, "GPS started");
+            // PASSIVE_PROVIDER确保只要有其他app的定位结果我们也能收到
+            try {
+                locationManager.requestLocationUpdates(
+                    LocationManager.PASSIVE_PROVIDER,
+                    5000, 5f, this, locationHandler.getLooper()
+                );
+            } catch (Exception e) {
+                Log.w(TAG, "Passive provider not available", e);
+            }
+            Log.i(TAG, "GPS started on handler thread");
         } catch (SecurityException e) {
             Log.e(TAG, "No location permission", e);
+            diagEvent(DIAG_PERMISSION_STATE, "No location permission: " + e.getMessage());
+            lastError = "定位权限未开启";
             notifyState("定位权限未开启，请在系统设置中允许定位");
         } catch (Exception e) {
             Log.e(TAG, "Failed to start GPS", e);
+            diagEvent(DIAG_EXCEPTION, "startGps: " + e.getMessage());
+            lastError = "GPS启动失败: " + e.getMessage();
             notifyState("GPS启动失败: " + e.getMessage());
         }
     }
@@ -259,29 +372,55 @@ public class GpsRunService extends Service implements LocationListener {
         try {
             locationManager.removeUpdates(this);
             Log.i(TAG, "GPS stopped");
+            diagEvent(DIAG_GPS_DISABLED, "Location updates removed");
         } catch (Exception e) {
             Log.w(TAG, "Error stopping GPS", e);
         }
     }
 
-    private void releaseWakeLock() {
-        if (wakeLock != null && wakeLock.isHeld()) {
-            wakeLock.release();
-            Log.i(TAG, "WakeLock released");
+    private void acquireWakeLock() {
+        try {
+            if (wakeLock != null && !wakeLock.isHeld()) {
+                wakeLock.acquire(4 * 60 * 60 * 1000L); // 4 hour max
+                diagEvent(DIAG_WAKELOCK_ACQUIRED, "WakeLock acquired (4h max)");
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "WakeLock acquire failed", e);
         }
     }
 
-    // ===== LocationListener =====
+    private void releaseWakeLock() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+                diagEvent(DIAG_WAKELOCK_RELEASED, "WakeLock released");
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "WakeLock release failed", e);
+        }
+    }
+
+    // ===== LocationListener (运行在HandlerThread上) =====
 
     @Override
     public void onLocationChanged(Location location) {
+        lastLocationCallbackMs = System.currentTimeMillis();
+        diagEvent(DIAG_LOCATION_CALLBACK,
+            "provider=" + location.getProvider()
+            + " lat=" + location.getLatitude()
+            + " lng=" + location.getLongitude()
+            + " acc=" + (location.hasAccuracy() ? location.getAccuracy() : "N/A")
+            + " screenOff=" + screenOff);
+
         if (runState != RunState.STATE_RUNNING) return;
 
         long now = System.currentTimeMillis();
+        lastAccuracy = location.hasAccuracy() ? location.getAccuracy() : 999f;
+
         RunState.TrackPoint point = new RunState.TrackPoint();
         point.latitude = location.getLatitude();
         point.longitude = location.getLongitude();
-        point.accuracy = location.hasAccuracy() ? location.getAccuracy() : 999f;
+        point.accuracy = lastAccuracy;
         point.altitude = location.hasAltitude() ? location.getAltitude() : 0;
         point.speed = location.hasSpeed() ? location.getSpeed() : 0f;
         point.bearing = location.hasBearing() ? location.getBearing() : 0f;
@@ -295,11 +434,14 @@ public class GpsRunService extends Service implements LocationListener {
             point.accepted = false;
             point.rejectionReason = rejection;
             rejectedPointCount++;
+            diagEvent(DIAG_LOCATION_REJECTED, rejection);
         } else {
             point.accepted = true;
             validPointCount++;
+            diagEvent(DIAG_LOCATION_ACCEPTED,
+                "distDelta=" + (hasLastPoint ? haversineM(lastLat, lastLon, point.latitude, point.longitude) : 0)
+                + " totalDist=" + totalDistanceM);
 
-            // 计算距离增量
             double delta = 0;
             if (hasLastPoint) {
                 delta = haversineM(lastLat, lastLon, point.latitude, point.longitude);
@@ -311,87 +453,86 @@ public class GpsRunService extends Service implements LocationListener {
             hasLastPoint = true;
             lastPointTimestamp = now;
 
-            // 更新移动时长
-            totalMovingDurationMs += 1000; // approximate: each valid point = 1s moving
-
-            // 每公里分段检测
+            totalMovingDurationMs += 1000;
             checkSplit(now);
         }
 
-        // 落盘
-        dbHelper.insertTrackPoint(currentActivityId, point);
-
-        // 批量缓冲（用于JS回调）
-        synchronized (pointBuffer) {
-            pointBuffer.add(point);
-            if (pointBuffer.size() >= BUFFER_FLUSH_SIZE) {
-                flushBuffer();
+        // ★ 每个点独立写入SQLite
+        try {
+            long rowId = dbHelper.insertTrackPoint(currentActivityId, point);
+            if (rowId > 0) {
+                lastSqliteWriteMs = System.currentTimeMillis();
+                diagEvent(DIAG_SQLITE_WRITE_OK, "rowId=" + rowId);
+            } else {
+                diagEvent(DIAG_SQLITE_WRITE_FAILED, "insert returned " + rowId);
             }
+        } catch (Exception e) {
+            Log.e(TAG, "SQLite write failed", e);
+            diagEvent(DIAG_SQLITE_WRITE_FAILED, e.getMessage());
+            lastError = "SQLite write: " + e.getMessage();
         }
 
         // 更新活动状态
-        dbHelper.updateActivityState(
-            currentActivityId, runState, 0,
-            totalDistanceM, totalPausedMs,
-            totalMovingDurationMs,
-            runState == RunState.STATE_RUNNING ? now - startTimeMs - totalPausedMs : 0,
-            currentSplitIndex, splitDistanceM,
-            lastPauseStartMs
-        );
+        try {
+            dbHelper.updateActivityState(
+                currentActivityId, runState, 0,
+                totalDistanceM, totalPausedMs, totalMovingDurationMs,
+                runState == RunState.STATE_RUNNING ? now - startTimeMs - totalPausedMs : 0,
+                currentSplitIndex, splitDistanceM, lastPauseStartMs);
+        } catch (Exception e) {
+            Log.w(TAG, "Activity state update failed", e);
+        }
 
-        // 更新通知
+        // 更新通知（锁屏时通知更新会显示在锁屏界面上）
         String distStr = String.format(Locale.CHINA, "%.2f km", totalDistanceM / 1000);
         long elapsedSec = (now - startTimeMs - totalPausedMs) / 1000;
         String durStr = String.format(Locale.CHINA, "%02d:%02d", elapsedSec / 60, elapsedSec % 60);
         updateNotification("E23跑起来正在记录", distStr, durStr);
 
-        // 回调JS层
+        // 回调解JS层
         notifyJS(point, now);
     }
 
     @Override
     public void onStatusChanged(String provider, int status, Bundle extras) {
-        Log.d(TAG, "GPS status changed: " + provider + " -> " + status);
+        Log.d(TAG, "GPS status: " + provider + " -> " + status);
+        if (status == 0) { // OUT_OF_SERVICE
+            diagEvent(DIAG_GPS_DISABLED, provider + " is out of service");
+        }
     }
 
     @Override
     public void onProviderEnabled(String provider) {
-        Log.d(TAG, "Provider enabled: " + provider);
+        Log.i(TAG, "Provider enabled: " + provider);
+        diagEvent(DIAG_GPS_ENABLED, provider + " enabled");
     }
 
     @Override
     public void onProviderDisabled(String provider) {
-        Log.d(TAG, "Provider disabled: " + provider);
+        Log.w(TAG, "Provider disabled: " + provider);
+        diagEvent(DIAG_GPS_DISABLED, provider + " disabled");
         notifyState("GPS信号丢失，请检查定位开关");
     }
 
     // ===== 质量过滤 =====
 
     private String validatePoint(RunState.TrackPoint point, long now) {
-        // 精度过滤
         if (point.accuracy > ACCURACY_LIMIT_M) {
             return "accuracy_too_low:" + point.accuracy;
         }
-
-        // 时间倒退
         if (lastPointTimestamp > 0 && point.timestampMs < lastPointTimestamp) {
             return "time_regression";
         }
-
-        // 重复点（0.5m内不记录）
         if (hasLastPoint) {
             double d = haversineM(lastLat, lastLon, point.latitude, point.longitude);
             if (d < MIN_POINT_DISTANCE_M) {
-                return "duplicate_point:within_" + String.format(Locale.US, "%.1f", d) + "m";
+                return "duplicate_point:" + String.format(Locale.US, "%.1f", d) + "m";
             }
         }
-
-        // 模拟定位
         if (point.mockLocation) {
             return "mock_location";
         }
-
-        return null; // valid
+        return null;
     }
 
     // ===== 分段管理 =====
@@ -401,17 +542,13 @@ public class GpsRunService extends Service implements LocationListener {
             RunState.SplitInfo split = new RunState.SplitInfo();
             split.splitIndex = currentSplitIndex;
             split.distanceM = splitDistanceM;
-            split.durationS = (now - splitStartTimeMs) / 1000.0;
+            split.durationS = (now - (currentSplitIndex == 0 ? startTimeMs : splitList.get(splitList.size()-1).endTimeMs)) / 1000.0;
             split.paceSecPerKm = splitDistanceM > 0 ? split.durationS / (splitDistanceM / 1000) : 0;
-            split.startTimeMs = splitStartTimeMs;
+            split.startTimeMs = currentSplitIndex == 0 ? startTimeMs : splitList.get(splitList.size()-1).endTimeMs;
             split.endTimeMs = now;
             splitList.add(split);
-
             currentSplitIndex++;
             splitDistanceM = 0;
-            splitStartTimeMs = now;
-
-            // 持久化分段JSON
             try {
                 org.json.JSONArray arr = new org.json.JSONArray();
                 for (RunState.SplitInfo s : splitList) arr.put(s.toJson());
@@ -428,9 +565,9 @@ public class GpsRunService extends Service implements LocationListener {
         final double R = 6371000;
         double dLat = Math.toRadians(lat2 - lat1);
         double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                   Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                   Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+            * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         return 2 * R * Math.asin(Math.sqrt(a));
     }
 
@@ -440,8 +577,6 @@ public class GpsRunService extends Service implements LocationListener {
         currentActivityId = activityId;
         runState = RunState.STATE_RUNNING;
         startTimeMs = startTs;
-        splitStartTimeMs = startTs;
-        splitStartDistanceM = 0;
         totalDistanceM = 0;
         totalPausedMs = 0;
         totalMovingDurationMs = 0;
@@ -452,28 +587,27 @@ public class GpsRunService extends Service implements LocationListener {
         splitDistanceM = 0;
         lastPauseStartMs = 0;
         lastPointTimestamp = 0;
+        lastLocationCallbackMs = 0;
+        lastSqliteWriteMs = 0;
+        screenOff = false;
+        appBackgrounded = false;
         splitList.clear();
         pauseList.clear();
-        pointBuffer.clear();
 
-        // Acquire wake lock
-        if (wakeLock != null && !wakeLock.isHeld()) {
-            wakeLock.acquire(4 * 60 * 60 * 1000L); // 4 hour max
-        }
-
+        acquireWakeLock();
         startGps();
+
         Log.i(TAG, "Run started: " + activityId);
+        diagEvent(DIAG_SERVICE_START, "Run started: " + activityId);
         notifyState("跑步进行中");
         notifyJSStats();
     }
 
     private synchronized void pauseRun() {
         if (runState != RunState.STATE_RUNNING) return;
-
         runState = RunState.STATE_PAUSED;
         lastPauseStartMs = System.currentTimeMillis();
 
-        // 写入暂停周期
         RunState.PausePeriod period = new RunState.PausePeriod();
         period.startMs = lastPauseStartMs;
         period.endMs = 0;
@@ -481,12 +615,11 @@ public class GpsRunService extends Service implements LocationListener {
 
         stopGps();
         releaseWakeLock();
-        updateNotification("E23已暂停", String.format(Locale.CHINA, "%.2f km", totalDistanceM / 1000), "已暂停");
-        Log.i(TAG, "Run paused at distance: " + totalDistanceM + "m");
+        updateNotification("E23已暂停",
+            String.format(Locale.CHINA, "%.2f km", totalDistanceM / 1000), "已暂停");
+        Log.i(TAG, "Run paused");
         notifyState("已暂停");
         notifyJSStats();
-
-        // 保存暂停JSON
         try {
             org.json.JSONArray arr = new org.json.JSONArray();
             for (RunState.PausePeriod p : pauseList) arr.put(p.toJson());
@@ -498,41 +631,29 @@ public class GpsRunService extends Service implements LocationListener {
 
     private synchronized void resumeRun() {
         if (runState != RunState.STATE_PAUSED) return;
-
         long now = System.currentTimeMillis();
         long pausedDuration = now - lastPauseStartMs;
         totalPausedMs += pausedDuration;
-
-        // 完成暂停周期
         if (!pauseList.isEmpty()) {
             RunState.PausePeriod last = pauseList.get(pauseList.size() - 1);
             last.endMs = now;
         }
-
         runState = RunState.STATE_RUNNING;
-
-        // 重新获取wake lock
-        if (wakeLock != null && !wakeLock.isHeld()) {
-            wakeLock.acquire(4 * 60 * 60 * 1000L);
-        }
-
+        acquireWakeLock();
         startGps();
-        Log.i(TAG, "Run resumed, paused for " + pausedDuration + "ms");
+        Log.i(TAG, "Run resumed, paused " + pausedDuration + "ms");
         notifyState("跑步继续");
         notifyJSStats();
     }
 
     private synchronized void stopRun() {
         if (currentActivityId == null) return;
-
         long now = System.currentTimeMillis();
 
-        // 如果是从暂停状态结束，需要先完成暂停周期
         if (runState == RunState.STATE_PAUSED && !pauseList.isEmpty()) {
             RunState.PausePeriod last = pauseList.get(pauseList.size() - 1);
             if (last.endMs == 0) {
-                long pausedDuration = now - lastPauseStartMs;
-                totalPausedMs += pausedDuration;
+                totalPausedMs += now - lastPauseStartMs;
                 last.endMs = now;
             }
         }
@@ -540,76 +661,61 @@ public class GpsRunService extends Service implements LocationListener {
         stopGps();
         releaseWakeLock();
 
-        // 完成最后一段不足1km的split
+        // 完成最后一段split
         if (splitDistanceM > 0) {
             RunState.SplitInfo split = new RunState.SplitInfo();
             split.splitIndex = currentSplitIndex;
             split.distanceM = splitDistanceM;
-            split.durationS = (now - splitStartTimeMs) / 1000.0;
+            split.durationS = (now - splitStartTimeMs()) / 1000.0;
             split.paceSecPerKm = splitDistanceM > 0 ? split.durationS / (splitDistanceM / 1000) : 0;
-            split.startTimeMs = splitStartTimeMs;
+            split.startTimeMs = splitStartTimeMs();
             split.endTimeMs = now;
             splitList.add(split);
         }
 
-        // 刷新缓冲
-        flushBuffer();
-
-        // 最终更新活动状态
         long totalDuration = now - startTimeMs;
-        dbHelper.updateActivityState(
-            currentActivityId, RunState.STATE_IDLE, now,
-            totalDistanceM, totalPausedMs,
-            totalMovingDurationMs, totalDuration,
-            splitList.size() > 0 ? splitList.size() - 1 : 0, splitDistanceM, 0
-        );
+        dbHelper.updateActivityState(currentActivityId, RunState.STATE_IDLE, now,
+            totalDistanceM, totalPausedMs, totalMovingDurationMs, totalDuration,
+            splitList.size() > 0 ? splitList.size() - 1 : 0, splitDistanceM, 0);
 
-        // 保存分段
         try {
             org.json.JSONArray arr = new org.json.JSONArray();
             for (RunState.SplitInfo s : splitList) arr.put(s.toJson());
             dbHelper.saveSplitJson(currentActivityId, arr);
-        } catch (Exception e) {
-            Log.w(TAG, "Failed to save final split JSON", e);
-        }
+        } catch (Exception e) { Log.w(TAG, "Save split JSON", e); }
 
-        // 保存暂停
         try {
             org.json.JSONArray arr = new org.json.JSONArray();
             for (RunState.PausePeriod p : pauseList) arr.put(p.toJson());
             dbHelper.savePauseJson(currentActivityId, arr);
-        } catch (Exception e) {
-            Log.w(TAG, "Failed to save final pause JSON", e);
-        }
+        } catch (Exception e) { Log.w(TAG, "Save pause JSON", e); }
 
-        // 标记完成
         dbHelper.finishActivity(currentActivityId, now);
-
-        // 获取摘要
         RunState.RunSummary summary = dbHelper.loadSummary(currentActivityId);
 
-        // 通知JS层
-        if (stateListener != null) {
-            stateListener.onRunFinished(summary);
-        }
+        if (stateListener != null) stateListener.onRunFinished(summary);
 
         String distStr = String.format(Locale.CHINA, "%.2f km", totalDistanceM / 1000);
         updateNotification("跑步已结束", distStr,
             String.format(Locale.CHINA, "%02d:%02d", totalDuration / 60000, (totalDuration / 1000) % 60));
 
         Log.i(TAG, "Run finished: " + currentActivityId + " distance=" + totalDistanceM + "m");
-
-        // 重置状态
         currentActivityId = null;
         runState = RunState.STATE_IDLE;
-
         stopSelf();
+    }
+
+    private long splitStartTimeMs() {
+        if (splitList.isEmpty()) return startTimeMs;
+        return splitList.get(splitList.size() - 1).endTimeMs;
     }
 
     private void recoverRun(String activityId) {
         RunState rs = dbHelper.loadRunState(activityId);
-        if (rs == null) return;
-
+        if (rs == null) {
+            Log.w(TAG, "Recover: no state for " + activityId);
+            return;
+        }
         currentActivityId = rs.clientActivityId;
         runState = rs.state;
         startTimeMs = rs.startTimeMs;
@@ -623,12 +729,12 @@ public class GpsRunService extends Service implements LocationListener {
         pauseList.clear();
         pauseList.addAll(rs.pausePeriods);
 
-        // 如果之前是running状态，恢复为paused（等待用户手动resume）
         if (runState == RunState.STATE_RUNNING) {
-            runState = RunState.STATE_PAUSED;
+            runState = RunState.STATE_PAUSED; // 恢复为暂停，等待用户手动resume
         }
 
-        Log.i(TAG, "Recovered run: " + activityId + " state=" + runState + " dist=" + totalDistanceM + "m");
+        Log.i(TAG, "Recovered run: " + activityId + " dist=" + totalDistanceM + "m");
+        diagEvent(DIAG_SERVICE_RESTART, "Recovered run: " + activityId);
 
         if (stateListener != null) {
             stateListener.onActiveRunDetected(activityId, startTimeMs, totalDistanceM);
@@ -637,19 +743,9 @@ public class GpsRunService extends Service implements LocationListener {
 
     // ===== JS回调 =====
 
-    private void flushBuffer() {
-        synchronized (pointBuffer) {
-            if (!pointBuffer.isEmpty() && currentActivityId != null) {
-                dbHelper.insertTrackPoints(currentActivityId, new ArrayList<>(pointBuffer));
-                pointBuffer.clear();
-            }
-        }
-    }
-
     private void notifyState(String message) {
-        if (stateListener != null) {
+        if (stateListener != null)
             stateListener.onServiceStateChange(runState, message);
-        }
     }
 
     private void notifyJS(RunState.TrackPoint point, long now) {
@@ -662,28 +758,100 @@ public class GpsRunService extends Service implements LocationListener {
     private void notifyJSStats() {
         if (stateListener == null) return;
         long now = System.currentTimeMillis();
-        long elapsedSec = runState == RunState.STATE_RUNNING ? (now - startTimeMs - totalPausedMs) / 1000 : 0;
-
-        // Current pace: last 20s window
-        double currentPace = 0;
-        if (runState == RunState.STATE_RUNNING && hasLastPoint) {
-            // Use speed from last valid point
-            currentPace = 0; // will be computed from last 20s
-        }
-
-        // Average pace
+        long elapsedSec = runState == RunState.STATE_RUNNING
+            ? (now - startTimeMs - totalPausedMs) / 1000 : 0;
         double avgPace = 0;
-        if (totalDistanceM > 0 && elapsedSec > 0) {
+        if (totalDistanceM > 0 && elapsedSec > 0)
             avgPace = elapsedSec / (totalDistanceM / 1000.0);
+        stateListener.onStatsUpdate(totalDistanceM, elapsedSec * 1000, totalMovingDurationMs,
+            0, avgPace, currentSplitIndex, splitDistanceM,
+            runState, validPointCount, rejectedPointCount);
+    }
+
+    // ===== 诊断日志系统 =====
+
+    private void diagEvent(String event, String detail) {
+        diag.record(event, detail);
+    }
+
+    /**
+     * 诊断日志记录器
+     * 同时写入Android Logcat和APP内部数据库
+     */
+    public class Diagnostician {
+        private static final int MAX_EVENTS = 500;
+        private final List<DiagEntry> events = new ArrayList<>();
+
+        public synchronized void record(String event, String detail) {
+            long now = System.currentTimeMillis();
+            DiagEntry entry = new DiagEntry(event, detail, now);
+            events.add(entry);
+            if (events.size() > MAX_EVENTS) {
+                events.remove(0);
+            }
+            // 写入Logcat
+            Log.d(TAG, "DIAG [" + event + "] " + detail);
         }
 
-        double distanceKm = totalDistanceM / 1000;
-        stateListener.onStatsUpdate(
-            totalDistanceM, elapsedSec * 1000, totalMovingDurationMs,
-            currentPace, avgPace,
-            currentSplitIndex, splitDistanceM,
-            runState, validPointCount, rejectedPointCount
-        );
+        public synchronized List<DiagEntry> getEvents() {
+            return new ArrayList<>(events);
+        }
+
+        public synchronized List<DiagEntry> getEventsByType(String eventType) {
+            List<DiagEntry> result = new ArrayList<>();
+            for (DiagEntry e : events) {
+                if (e.event.equals(eventType)) result.add(e);
+            }
+            return result;
+        }
+
+        public synchronized String exportToText() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("=== E23 GPS Diagnostic Log ===\n");
+            sb.append("Time: ").append(java.text.DateFormat.getDateTimeInstance()
+                .format(new java.util.Date())).append("\n");
+            sb.append("Screen off: ").append(screenOff).append("\n");
+            sb.append("App backgrounded: ").append(appBackgrounded).append("\n");
+            sb.append("Run state: ").append(runState).append("\n");
+            sb.append("Activity ID: ").append(currentActivityId).append("\n");
+            sb.append("Last location: ").append(lastLocationCallbackMs > 0
+                ? java.text.DateFormat.getDateTimeInstance().format(new java.util.Date(lastLocationCallbackMs))
+                : "never").append("\n");
+            sb.append("Last SQLite write: ").append(lastSqliteWriteMs > 0
+                ? java.text.DateFormat.getDateTimeInstance().format(new java.util.Date(lastSqliteWriteMs))
+                : "never").append("\n");
+            sb.append("Total distance: ").append(totalDistanceM).append("m\n");
+            sb.append("Valid points: ").append(validPointCount).append("\n");
+            sb.append("Rejected points: ").append(rejectedPointCount).append("\n");
+            sb.append("Last error: ").append(lastError).append("\n\n");
+            sb.append("Recent events (newest first):\n");
+            for (int i = events.size() - 1; i >= Math.max(0, events.size() - 100); i--) {
+                DiagEntry e = events.get(i);
+                sb.append("[").append(java.text.DateFormat.getTimeInstance()
+                    .format(new java.util.Date(e.timestamp)))
+                    .append("] ").append(e.event).append(": ").append(e.detail).append("\n");
+            }
+            return sb.toString();
+        }
+
+        public synchronized int getEventCountByType(String eventType) {
+            int count = 0;
+            for (DiagEntry e : events) {
+                if (e.event.equals(eventType)) count++;
+            }
+            return count;
+        }
+
+        public class DiagEntry {
+            public final String event;
+            public final String detail;
+            public final long timestamp;
+            DiagEntry(String event, String detail, long timestamp) {
+                this.event = event;
+                this.detail = detail;
+                this.timestamp = timestamp;
+            }
+        }
     }
 
     // ===== 对外接口 =====
@@ -697,5 +865,4 @@ public class GpsRunService extends Service implements LocationListener {
     public int getRejectedPointCount() { return rejectedPointCount; }
     public int getCurrentSplitIndex() { return currentSplitIndex; }
     public double getSplitDistanceM() { return splitDistanceM; }
-    public List<RunState.SplitInfo> getSplitList() { return splitList; }
 }

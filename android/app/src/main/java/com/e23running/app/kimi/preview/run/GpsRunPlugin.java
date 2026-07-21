@@ -321,6 +321,66 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
         }
     }
 
+    // ===== 诊断接口 =====
+
+    @PluginMethod
+    public void getDiagnostics(PluginCall call) {
+        GpsRunService svc = GpsRunService.getInstance();
+        JSObject ret = new JSObject();
+        ret.put("phoneBrand", Build.BRAND);
+        ret.put("phoneModel", Build.MODEL);
+        ret.put("androidVersion", Build.VERSION.RELEASE);
+        ret.put("sdkVersion", Build.VERSION.SDK_INT);
+
+        if (svc != null) {
+            ret.put("serviceRunning", true);
+            ret.put("runState", svc.getRunState());
+            ret.put("activityId", svc.getCurrentActivityId());
+            ret.put("startTimeMs", svc.getStartTimeMs());
+            ret.put("totalDistanceM", svc.getTotalDistanceM());
+            ret.put("lastLocationCallbackMs", svc.getLastLocationCallbackMs());
+            ret.put("lastSqliteWriteMs", svc.getLastSqliteWriteMs());
+            ret.put("lastNotificationUpdateMs", svc.getLastNotificationUpdateMs());
+            ret.put("lastAccuracy", svc.getLastAccuracy());
+            ret.put("validPoints", svc.getValidPointCount());
+            ret.put("rejectedPoints", svc.getRejectedPointCount());
+            ret.put("screenOff", svc.isScreenOff());
+            ret.put("appBackgrounded", svc.isAppBackgrounded());
+            ret.put("lastError", svc.getLastError() != null ? svc.getLastError() : "");
+
+            // 诊断事件计数
+            GpsRunService.Diagnostician diag = svc.getDiagnostics();
+            ret.put("diagCount", diag.getEvents().size());
+            ret.put("locationCallbackCount", diag.getEventCountByType(GpsRunService.DIAG_LOCATION_CALLBACK));
+            ret.put("locationAcceptedCount", diag.getEventCountByType(GpsRunService.DIAG_LOCATION_ACCEPTED));
+            ret.put("locationRejectedCount", diag.getEventCountByType(GpsRunService.DIAG_LOCATION_REJECTED));
+            ret.put("sqliteWriteOk", diag.getEventCountByType(GpsRunService.DIAG_SQLITE_WRITE_OK));
+            ret.put("sqliteWriteFailed", diag.getEventCountByType(GpsRunService.DIAG_SQLITE_WRITE_FAILED));
+        } else {
+            ret.put("serviceRunning", false);
+        }
+
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void exportDiagnosticLog(PluginCall call) {
+        GpsRunService svc = GpsRunService.getInstance();
+        if (svc != null) {
+            String log = svc.getDiagnostics().exportToText();
+            JSObject ret = new JSObject();
+            ret.put("log", log);
+            call.resolve(ret);
+        } else {
+            JSObject ret = new JSObject();
+            ret.put("log", "=== E23 GPS Diagnostic Log ===\nService not running.\n");
+            ret.put("phoneBrand", Build.BRAND);
+            ret.put("phoneModel", Build.MODEL);
+            ret.put("androidVersion", Build.VERSION.RELEASE);
+            call.resolve(ret);
+        }
+    }
+
     // ===== 辅助方法 =====
 
     private String createNewActivity() {
