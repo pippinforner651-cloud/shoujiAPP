@@ -514,6 +514,125 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
         }
     }
 
+    // ===== GPS测试中心 - 三层原生诊断 =====
+
+    @PluginMethod
+    public void requestSingleFix(PluginCall call) {
+        try {
+            if (!hasFineLocationPermission()) {
+                call.reject("精确定位未授权");
+                return;
+            }
+            LocationManager manager = (LocationManager) getContext().getSystemService(android.content.Context.LOCATION_SERVICE);
+            if (manager == null) { call.reject("LocationManager不可用"); return; }
+            if (!isSystemLocationEnabled(manager)) { call.reject("系统定位未开启"); return; }
+            if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) { call.reject("GPS_PROVIDER未开启"); return; }
+
+            // 使用单次定位API (API 30+) 或回退方案
+            long startMs = System.currentTimeMillis();
+            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            final LocationManager mgr = manager;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                java.util.concurrent.Executor executor = android.os.AsyncTask.THREAD_POOL_EXECUTOR;
+                mgr.getCurrentLocation(LocationManager.GPS_PROVIDER, null, executor, loc -> {
+                    long endMs = System.currentTimeMillis();
+                    JSObject ret = buildSingleFixResult(loc, startMs, endMs);
+                    ret.put("api", "getCurrentLocation");
+                    if (loc == null) {
+                        // Try network as fallback
+                        try {
+                            mgr.getCurrentLocation(LocationManager.NETWORK_PROVIDER, null, executor, netLoc -> {
+                                JSObject r2 = buildSingleFixResult(netLoc, startMs, endMs);
+                                r2.put("api", "getCurrentLocation_networkFallback");
+                                r2.put("gpsFailed", true);
+                                call.resolve(r2);
+                            });
+                        } catch (Exception e) {
+                            ret.put("error", "GPS返回null且NETWORK也失败");
+                            call.resolve(ret);
+                        }
+                    } else {
+                        call.resolve(ret);
+                    }
+                    latch.countDown();
+                });
+            } else {
+                // API 29以下使用requestSingleUpdate
+                android.location.LocationListener listener = new android.location.LocationListener() {
+                    @Override public void onLocationChanged(android.location.Location loc) {
+                        long endMs = System.currentTimeMillis();
+                        JSObject ret = buildSingleFixResult(loc, startMs, endMs);
+                        ret.put("api", "requestSingleUpdate");
+                        mgr.removeUpdates(this);
+                        call.resolve(ret);
+                        latch.countDown();
+                    }
+                    @Override public void onStatusChanged(String p, int s, android.os.Bundle e) {}
+                    @Override public void onProviderEnabled(String p) {}
+                    @Override public void onProviderDisabled(String p) { call.reject("GPS定位过程中被关闭"); latch.countDown(); }
+                };
+                mgr.requestSingleUpdate(LocationManager.GPS_PROVIDER, listener, null);
+            }
+
+            // 60秒超时
+            new Thread(() -> {
+                try { if (!latch.await(60, java.util.concurrent.TimeUnit.SECONDS)) { call.reject("单次定位超时(60s)"); } }
+                catch (InterruptedException e) { call.reject("定位被中断"); }
+            }).start();
+        } catch (SecurityException e) { call.reject("定位权限异常: " + e.getMessage());
+        } catch (Exception e) { call.reject("单次定位失败: " + e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void startDiagnosticTracking(PluginCall call) {
+        try {
+            if (!hasFineLocationPermission()) { call.reject("精确定位未授权"); return; }
+            LocationManager manager = (LocationManager) getContext().getSystemService(android.content.Context.LOCATION_SERVICE);
+            if (manager == null || !manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) { call.reject("GPS_PROVIDER不可用"); return; }
+
+            long durationMs = call.getInt("durationMs", 60000);
+            JSObject result = new JSObject();
+            result.put("startTimeMs", System.currentTimeMillis());
+            result.put("durationMs", durationMs);
+            result.put("gpsCallbackCount", 0);
+            result.put("lockScreenPointCount", 0);
+            result.put("errors", new org.json.JSONArray());
+            // 简短的持续定位会在前端记录，这里只返回初始状态
+            call.resolve(result);
+        } catch (Exception e) { call.reject("诊断追踪启动失败: " + e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void cancelDiagnosticTracking(PluginCall call) {
+        call.resolve();
+    }
+
+    private JSObject buildSingleFixResult(android.location.Location loc, long startMs, long endMs) {
+        JSObject ret = new JSObject();
+        ret.put("startTimeMs", startMs);
+        ret.put("endTimeMs", endMs);
+        ret.put("durationMs", endMs - startMs);
+        if (loc != null) {
+            ret.put("success", true);
+            ret.put("provider", loc.getProvider());
+            ret.put("latitude", loc.getLatitude());
+            ret.put("longitude", loc.getLongitude());
+            ret.put("accuracy", loc.hasAccuracy() ? loc.getAccuracy() : -1);
+            ret.put("altitude", loc.hasAltitude() ? loc.getAltitude() : 0);
+            ret.put("speed", loc.hasSpeed() ? loc.getSpeed() : -1);
+            ret.put("bearing", loc.hasBearing() ? loc.getBearing() : -1);
+            ret.put("locationTimestampMs", loc.getTime());
+            ret.put("mockLocation", loc.isFromMockProvider());
+            ret.put("locationApi", "live");
+        } else {
+            ret.put("success", false);
+            ret.put("provider", "null");
+            ret.put("error", "定位结果为null");
+        }
+        return ret;
+    }
+
     // ===== 辅助方法 =====
 
     private boolean hasFineLocationPermission() {

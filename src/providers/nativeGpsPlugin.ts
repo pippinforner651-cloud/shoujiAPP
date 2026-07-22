@@ -56,6 +56,15 @@ export interface GpsRunPlugin {
   addListener(eventName: 'locationUpdate', listener: (event: TrackPointResponse) => void): Promise<PluginListenerHandle>;
   addListener(eventName: 'statsUpdate', listener: (event: StatsResponse) => void): Promise<PluginListenerHandle>;
   addListener(eventName: 'serviceStateChange', listener: (event: { state: number; message: string }) => void): Promise<PluginListenerHandle>;
+
+  /** 单次原生GPS定位 */
+  requestSingleFix(): Promise<SingleFixResponse>;
+
+  /** 启动持续定位诊断 */
+  startDiagnosticTracking(options: { durationMs?: number }): Promise<{ startTimeMs: number; durationMs: number; gpsCallbackCount: number; lockScreenPointCount: number }>;
+
+  /** 取消诊断追踪 */
+  cancelDiagnosticTracking(): Promise<void>;
 }
 
 // ===== 类型定义 =====
@@ -185,6 +194,27 @@ export interface DiagnosticsResponse {
   firstCallbackProvider?: string;
   lastCallbackProvider?: string;
   lastRejectReason?: string;
+}
+
+/** 单次定位结果 */
+export interface SingleFixResponse {
+  success: boolean;
+  startTimeMs: number;
+  endTimeMs: number;
+  durationMs: number;
+  provider: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  altitude: number;
+  speed: number;
+  bearing: number;
+  locationTimestampMs: number;
+  mockLocation: boolean;
+  api: string;
+  error?: string;
+  gpsFailed?: boolean;
+  locationApi: string;
 }
 
 // 注册插件

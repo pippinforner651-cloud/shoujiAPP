@@ -8,6 +8,7 @@ import type { MyStats } from '../api/types';
 import JoyrunImport from '../components/JoyrunImport';
 import ProviderSyncPanel from '../components/ProviderSyncPanel';
 import DiagnosticPanel from '../components/DiagnosticPanel';
+import GpsTestCenter from './GpsTestCenter';
 
 // 路线包完整性校验值（FNV-1a，用于版本核对与回滚校验）
 function packChecksum(p: { nodes: unknown[]; totalKm: number }): string {
@@ -23,6 +24,7 @@ function packChecksum(p: { nodes: unknown[]; totalKm: number }): string {
 export default function ProfilePage() {
   useSyncExternalStore((f) => store.subscribe(f), () => store.version);
   const me = store.user;
+  const [showGpsTest, setShowGpsTest] = useState(false);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(me?.nickname || '');
   const [packMsg, setPackMsg] = useState('');
@@ -59,6 +61,7 @@ export default function ProfilePage() {
   };
 
   if (!me) return null;
+  if (showGpsTest) return <GpsTestCenter onBack={() => setShowGpsTest(false)} />;
 
   const importPack = (f: File) => {
     const rd = new FileReader();
@@ -226,6 +229,9 @@ export default function ProfilePage() {
       {/* GPS诊断 */}
       <Section title="GPS诊断">
         <DiagnosticPanel />
+        <button onClick={() => setShowGpsTest(true)} className="mt-3 w-full py-2.5 rounded-2xl bg-orange-500 text-white text-sm font-bold active:bg-orange-600">
+          📡 手机GPS测试中心（三层诊断）
+        </button>
       </Section>
 
       {/* 地图包与路线状态 */}
