@@ -8,6 +8,7 @@ export class LeafletRunMapAdapter implements RunMapAdapter {
   private accuracy: Circle | null = null;
   private trackLine: Polyline | null = null;
   private follow = true;
+  private resizeTimer: number | null = null;
 
   mount(container: HTMLElement, callbacks: RunMapCallbacks) {
     this.map = L.map(container, { zoomControl: false, attributionControl: true }).setView([22.6, 113.97], 15);
@@ -15,9 +16,11 @@ export class LeafletRunMapAdapter implements RunMapAdapter {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
     });
-    tiles.on('tileerror', () => callbacks.onError('地图暂时无法加载，GPS仍在记录'));
+    tiles.on('tileerror', () => callbacks.onError('地图瓦片加载失败，GPS仍在记录'));
     tiles.addTo(this.map);
     this.map.on('dragstart zoomstart', () => callbacks.onUserInteraction());
+    window.requestAnimationFrame(() => this.map?.invalidateSize(false));
+    this.resizeTimer = window.setTimeout(() => this.map?.invalidateSize(false), 250);
   }
 
   setCurrentPosition(point: RunTrackPoint | null, accuracyM: number | null) {
@@ -41,7 +44,12 @@ export class LeafletRunMapAdapter implements RunMapAdapter {
     if (this.map && this.trackLine && this.trackLine.getLatLngs().length > 1) this.map.fitBounds(this.trackLine.getBounds(), { padding: [24, 24] });
   }
   setFollow(enabled: boolean) { this.follow = enabled; }
-  destroy() { this.map?.remove(); this.map = null; }
+  destroy() {
+    if (this.resizeTimer !== null) window.clearTimeout(this.resizeTimer);
+    this.resizeTimer = null;
+    this.map?.remove();
+    this.map = null;
+  }
 }
 
 export const createLeafletRunMap = (): RunMapAdapter => new LeafletRunMapAdapter();

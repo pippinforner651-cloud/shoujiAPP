@@ -22,6 +22,7 @@ describe('RunMap', () => {
     (map.mount as ReturnType<typeof vi.fn>).mockImplementation((_el, callbacks) => callbacks.onError('地图暂时无法加载，GPS仍在记录'));
     render(<RunMap mode="running" currentPoint={point} track={[]} accuracyM={8} follow onFollowChange={vi.fn()} onRenderedPointCount={vi.fn()} adapterFactory={() => map} />);
     expect(screen.getByText('地图暂时无法加载，GPS仍在记录')).toBeInTheDocument();
+    expect(screen.getByText('22.600000, 113.970000')).toBeInTheDocument();
   });
 
   it('restores follow mode from the visible button', () => {

@@ -6,11 +6,23 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8'
 
 const plugin = read('android/app/src/main/java/com/e23running/app/kimi/preview/run/GpsRunPlugin.java');
 const service = read('android/app/src/main/java/com/e23running/app/kimi/preview/run/GpsRunService.java');
+const mainActivity = read('android/app/src/main/java/com/e23running/app/kimi/preview/MainActivity.java');
 const database = read('android/app/src/main/java/com/e23running/app/kimi/preview/run/RunDatabaseHelper.java');
+const runPage = read('src/pages/RunPage.tsx');
+const leafletMap = read('src/maps/leafletMap.ts');
+const styles = read('src/index.css');
 const workflowPath = resolve(process.cwd(), '.github/workflows/codex-phase1-gps-map-apk.yml');
 const state = read('android/app/src/main/java/com/e23running/app/kimi/preview/run/RunState.java');
 
 describe('native GPS contract', () => {
+  it('registers the custom plugin before Capacitor creates the bridge', () => {
+    const registration = mainActivity.match(/registerPlugin\([^;]+;/)?.index ?? -1;
+    const bridgeCreation = mainActivity.match(/super\.onCreate\(savedInstanceState\);/)?.index ?? -1;
+    expect(registration).toBeGreaterThan(-1);
+    expect(bridgeCreation).toBeGreaterThan(-1);
+    expect(registration).toBeLessThan(bridgeCreation);
+  });
+
   it('declares an explicit fine/coarse location permission alias', () => {
     expect(plugin).toContain('@Permission');
     expect(plugin).toContain('alias = "location"');
@@ -27,6 +39,29 @@ describe('native GPS contract', () => {
   it('checks the GPS system switch before preparation', () => {
     expect(plugin).toContain('isProviderEnabled(LocationManager.GPS_PROVIDER)');
     expect(plugin).toContain('gpsEnabled');
+  });
+
+  it('records GPS request outcome and provider-specific callback evidence', () => {
+    for (const evidence of ['locationRequestSucceeded', 'gpsCallbackCount', 'networkCallbackCount', 'firstCallbackProvider', 'lastCallbackProvider', 'lastRejectReason']) {
+      expect(service).toContain(evidence);
+      expect(plugin).toContain(evidence);
+    }
+    expect(service).not.toContain('requestLocationUpdates(\n                    LocationManager.PASSIVE_PROVIDER');
+  });
+
+  it('does not create an official run before a real GPS callback', () => {
+    const startMethod = service.match(/public synchronized String startOfficialRun\(\) \{([\s\S]*?)\n\s{4}\}/)?.[1] ?? '';
+    expect(startMethod).toContain('gpsCallbackCount');
+    expect(startMethod).toContain('locationRequestSucceeded');
+  });
+
+  it('exposes native settings actions and complete readiness states', () => {
+    for (const method of ['openAppLocationSettings', 'openSystemLocationSettings']) {
+      expect(plugin).toContain(`void ${method}(PluginCall call)`);
+    }
+    for (const field of ['locationPermission', 'systemLocationEnabled', 'networkEnabled', 'notificationPermissionGranted']) {
+      expect(plugin).toContain(field);
+    }
   });
 
   it('has a PREPARING state that does not create a database activity', () => {
@@ -70,6 +105,19 @@ describe('native GPS contract', () => {
     expect(state).toContain('STATE_ABANDONED');
     expect(database).toContain('abandonActivity');
     expect(plugin).not.toMatch(/abandonRun[\s\S]{0,600}delete/i);
+  });
+});
+
+describe('Phase 1.5 live map and visible diagnostics contract', () => {
+  it('keeps a real map canvas at a fixed height and resizes Leaflet after reveal', () => {
+    expect(styles).toMatch(/\.run-map-canvas\s*\{[^}]*height:\s*320px/s);
+    expect(leafletMap).toContain('invalidateSize');
+  });
+
+  it('shows actionable GPS states instead of a silent zero-distance run', () => {
+    for (const text of ['定位权限未授权', '仅大概位置，无法准确计距', '手机定位未开启', 'GPS未就绪，当前不计距离']) {
+      expect(runPage).toContain(text);
+    }
   });
 });
 

@@ -6,8 +6,8 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        // 注册原生GPS跑步插件
+        // Capacitor在super.onCreate()中创建Bridge，自定义插件必须先注册。
         registerPlugin(com.e23running.app.kimi.preview.run.GpsRunPlugin.class);
+        super.onCreate(savedInstanceState);
     }
 }

@@ -130,6 +130,13 @@ public class GpsRunService extends Service implements LocationListener {
     private volatile long lastNotificationUpdateMs;
     private volatile float lastAccuracy;
     private volatile String lastError;
+    private volatile boolean locationRequestSucceeded;
+    private volatile int gpsCallbackCount;
+    private volatile int networkCallbackCount;
+    private volatile int passiveCallbackCount;
+    private volatile String firstCallbackProvider = "";
+    private volatile String lastCallbackProvider = "";
+    private volatile String lastRejectReason = "";
 
     private final List<RunState.SplitInfo> splitList = new ArrayList<>();
     private final List<RunState.PausePeriod> pauseList = new ArrayList<>();
@@ -161,6 +168,13 @@ public class GpsRunService extends Service implements LocationListener {
     public String getLastError() { return lastError; }
     public boolean isScreenOff() { return screenOff; }
     public boolean isAppBackgrounded() { return appBackgrounded; }
+    public boolean isLocationRequestSucceeded() { return locationRequestSucceeded; }
+    public int getGpsCallbackCount() { return gpsCallbackCount; }
+    public int getNetworkCallbackCount() { return networkCallbackCount; }
+    public int getPassiveCallbackCount() { return passiveCallbackCount; }
+    public String getFirstCallbackProvider() { return firstCallbackProvider; }
+    public String getLastCallbackProvider() { return lastCallbackProvider; }
+    public String getLastRejectReason() { return lastRejectReason; }
 
     @Override
     public void onCreate() {
@@ -341,39 +355,45 @@ public class GpsRunService extends Service implements LocationListener {
     // ===== GPS管理 (使用HandlerThread确保锁屏回调) =====
 
     private void startGps() {
+        locationRequestSucceeded = false;
         try {
+            if (locationManager == null || locationHandler == null || !locationThread.isAlive()) {
+                throw new IllegalStateException("Location service thread is unavailable");
+            }
+            if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                throw new IllegalStateException("GPS provider is disabled");
+            }
             diagEvent(DIAG_LOCATION_REQUEST_START,
                 "Requesting GPS updates on handler thread");
             // 使用HandlerThread的Looper，避免锁屏时主线程Looper不处理回调
+            // ★ minDistance=0 确保静止时也能收到首次GPS回调（改为0f，原1f可能阻止静止定位）
             locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
-                1000, 1f, this, locationHandler.getLooper()
+                1000, 0f, this, locationHandler.getLooper()
             );
-            // 网络定位作为备用
+            locationRequestSucceeded = true;
+            diagEvent(DIAG_GPS_ENABLED, "GPS requestLocationUpdates succeeded");
+            // NETWORK只用于显示粗略位置，不参与firstFix或距离累计。
             try {
+                if (!locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                    throw new IllegalStateException("Network provider is disabled");
+                }
                 locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
-                    3000, 3f, this, locationHandler.getLooper()
+                    3000, 0f, this, locationHandler.getLooper()
                 );
             } catch (Exception e) {
                 Log.w(TAG, "Network provider not available", e);
             }
-            // PASSIVE_PROVIDER确保只要有其他app的定位结果我们也能收到
-            try {
-                locationManager.requestLocationUpdates(
-                    LocationManager.PASSIVE_PROVIDER,
-                    5000, 5f, this, locationHandler.getLooper()
-                );
-            } catch (Exception e) {
-                Log.w(TAG, "Passive provider not available", e);
-            }
             Log.i(TAG, "GPS started on handler thread");
         } catch (SecurityException e) {
+            locationRequestSucceeded = false;
             Log.e(TAG, "No location permission", e);
             diagEvent(DIAG_PERMISSION_STATE, "No location permission: " + e.getMessage());
             lastError = "定位权限未开启";
             notifyState("定位权限未开启，请在系统设置中允许定位");
         } catch (Exception e) {
+            locationRequestSucceeded = false;
             Log.e(TAG, "Failed to start GPS", e);
             diagEvent(DIAG_EXCEPTION, "startGps: " + e.getMessage());
             lastError = "GPS启动失败: " + e.getMessage();
@@ -384,6 +404,7 @@ public class GpsRunService extends Service implements LocationListener {
     private void stopGps() {
         try {
             locationManager.removeUpdates(this);
+            locationRequestSucceeded = false;
             Log.i(TAG, "GPS stopped");
             diagEvent(DIAG_GPS_DISABLED, "Location updates removed");
         } catch (Exception e) {
@@ -418,8 +439,14 @@ public class GpsRunService extends Service implements LocationListener {
     @Override
     public void onLocationChanged(Location location) {
         lastLocationCallbackMs = System.currentTimeMillis();
+        String callbackProvider = location.getProvider() != null ? location.getProvider() : "unknown";
+        if (firstCallbackProvider.isEmpty()) firstCallbackProvider = callbackProvider;
+        lastCallbackProvider = callbackProvider;
+        if (LocationManager.GPS_PROVIDER.equals(callbackProvider)) gpsCallbackCount++;
+        else if (LocationManager.NETWORK_PROVIDER.equals(callbackProvider)) networkCallbackCount++;
+        else if (LocationManager.PASSIVE_PROVIDER.equals(callbackProvider)) passiveCallbackCount++;
         diagEvent(DIAG_LOCATION_CALLBACK,
-            "provider=" + location.getProvider()
+            "provider=" + callbackProvider
             + " lat=" + location.getLatitude()
             + " lng=" + location.getLongitude()
             + " acc=" + (location.hasAccuracy() ? location.getAccuracy() : "N/A")
@@ -458,6 +485,7 @@ public class GpsRunService extends Service implements LocationListener {
         point.riskFlag = evaluation.riskFlag;
         firstFixReceived = pointEvaluator.hasFirstFix();
         distMode = firstFixReceived ? DIST_MODE_ACCURATE : DIST_MODE_FIRST_FIX;
+        lastRejectReason = point.accepted || point.rejectionReason == null ? "" : point.rejectionReason;
 
         if (!point.accepted) {
             if (officialRun) rejectedPointCount++;
@@ -585,6 +613,13 @@ public class GpsRunService extends Service implements LocationListener {
         lastPointTimestamp = 0;
         lastLocationCallbackMs = 0;
         lastSqliteWriteMs = 0;
+        locationRequestSucceeded = false;
+        gpsCallbackCount = 0;
+        networkCallbackCount = 0;
+        passiveCallbackCount = 0;
+        firstCallbackProvider = "";
+        lastCallbackProvider = "";
+        lastRejectReason = "";
         screenOff = false;
         appBackgrounded = false;
         splitList.clear();
@@ -604,6 +639,12 @@ public class GpsRunService extends Service implements LocationListener {
         }
         if (runState != RunState.STATE_PREPARING) {
             throw new IllegalStateException("请先完成户外跑定位准备");
+        }
+        if (!locationRequestSucceeded) {
+            throw new IllegalStateException("GPS定位请求未成功，不能开始跑步");
+        }
+        if (gpsCallbackCount <= 0) {
+            throw new IllegalStateException("GPS尚未收到真实回调，不能开始跑步");
         }
         long startTs = System.currentTimeMillis();
         String activityId = dbHelper.createActivity(startTs);

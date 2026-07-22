@@ -1,10 +1,13 @@
 package com.e23running.app.kimi.preview.run;
 
 import android.Manifest;
+import android.app.NotificationManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
+import android.net.Uri;
 import android.os.Build;
+import android.provider.Settings;
 import android.util.Log;
 
 import androidx.core.content.ContextCompat;
@@ -50,6 +53,10 @@ import java.util.List;
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION
             }
+        ),
+        @Permission(
+            alias = "notifications",
+            strings = { Manifest.permission.POST_NOTIFICATIONS }
         )
     }
 )
@@ -74,11 +81,24 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
             requestPermissionForAlias("location", call, "locationPermissionCallback");
             return;
         }
+        if (needsNotificationPermission()) {
+            requestPermissionForAlias("notifications", call, "notificationPermissionCallback");
+            return;
+        }
         resolveOutdoorReadiness(call);
     }
 
     @PermissionCallback
     private void locationPermissionCallback(PluginCall call) {
+        if (hasFineLocationPermission() && needsNotificationPermission()) {
+            requestPermissionForAlias("notifications", call, "notificationPermissionCallback");
+            return;
+        }
+        resolveOutdoorReadiness(call);
+    }
+
+    @PermissionCallback
+    private void notificationPermissionCallback(PluginCall call) {
         resolveOutdoorReadiness(call);
     }
 
@@ -174,6 +194,31 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
             call.resolve();
         } catch (Exception e) {
             call.reject("Failed to abandon: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void openAppLocationSettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("无法打开应用定位设置: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void openSystemLocationSettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("无法打开系统定位设置: " + e.getMessage());
         }
     }
 
@@ -401,6 +446,8 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
         ret.put("phoneModel", Build.MODEL);
         ret.put("androidVersion", Build.VERSION.RELEASE);
         ret.put("sdkVersion", Build.VERSION.SDK_INT);
+        ret.put("pluginLoaded", true);
+        putReadiness(ret);
 
         if (svc != null) {
             ret.put("serviceRunning", true);
@@ -419,6 +466,13 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
             ret.put("lastError", svc.getLastError() != null ? svc.getLastError() : "");
             ret.put("firstFixReceived", svc.hasFirstFix());
             ret.put("distMode", svc.getDistMode());
+            ret.put("locationRequestSucceeded", svc.isLocationRequestSucceeded());
+            ret.put("gpsCallbackCount", svc.getGpsCallbackCount());
+            ret.put("networkCallbackCount", svc.getNetworkCallbackCount());
+            ret.put("passiveCallbackCount", svc.getPassiveCallbackCount());
+            ret.put("firstCallbackProvider", svc.getFirstCallbackProvider());
+            ret.put("lastCallbackProvider", svc.getLastCallbackProvider());
+            ret.put("lastRejectReason", svc.getLastRejectReason());
 
             // 诊断事件计数
             GpsRunService.Diagnostician diag = svc.getDiagnostics();
@@ -430,6 +484,13 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
             ret.put("sqliteWriteFailed", diag.getEventCountByType(GpsRunService.DIAG_SQLITE_WRITE_FAILED));
         } else {
             ret.put("serviceRunning", false);
+            ret.put("locationRequestSucceeded", false);
+            ret.put("gpsCallbackCount", 0);
+            ret.put("networkCallbackCount", 0);
+            ret.put("passiveCallbackCount", 0);
+            ret.put("firstCallbackProvider", "");
+            ret.put("lastCallbackProvider", "");
+            ret.put("lastRejectReason", "");
         }
 
         call.resolve(ret);
@@ -460,17 +521,46 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
             == PackageManager.PERMISSION_GRANTED;
     }
 
-    private void resolveOutdoorReadiness(PluginCall call) {
+    private boolean needsNotificationPermission() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean isSystemLocationEnabled(LocationManager manager) {
+        if (manager == null) return false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return manager.isLocationEnabled();
+        return manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            || manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+    }
+
+    private void putReadiness(JSObject result) {
         boolean fineGranted = hasFineLocationPermission();
         boolean coarseGranted = ContextCompat.checkSelfPermission(
             getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
         LocationManager manager = (LocationManager) getContext().getSystemService(android.content.Context.LOCATION_SERVICE);
         boolean gpsEnabled = manager != null && manager.isProviderEnabled(LocationManager.GPS_PROVIDER);
-        JSObject result = new JSObject();
+        boolean networkEnabled = manager != null && manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        boolean systemLocationEnabled = isSystemLocationEnabled(manager);
+        boolean notificationPermissionGranted = !needsNotificationPermission();
+        boolean foregroundServicePermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.P
+            || ContextCompat.checkSelfPermission(getContext(), Manifest.permission.FOREGROUND_SERVICE)
+                == PackageManager.PERMISSION_GRANTED;
+        String locationPermission = fineGranted ? "precise" : coarseGranted ? "approximate" : "denied";
         result.put("fineLocationGranted", fineGranted);
         result.put("coarseLocationGranted", coarseGranted);
+        result.put("locationPermission", locationPermission);
+        result.put("systemLocationEnabled", systemLocationEnabled);
         result.put("gpsEnabled", gpsEnabled);
-        result.put("ready", fineGranted && gpsEnabled);
+        result.put("networkEnabled", networkEnabled);
+        result.put("notificationPermissionGranted", notificationPermissionGranted);
+        result.put("foregroundServicePermissionGranted", foregroundServicePermissionGranted);
+        result.put("ready", fineGranted && systemLocationEnabled && gpsEnabled);
+    }
+
+    private void resolveOutdoorReadiness(PluginCall call) {
+        JSObject result = new JSObject();
+        putReadiness(result);
         call.resolve(result);
     }
 

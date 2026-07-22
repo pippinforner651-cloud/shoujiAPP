@@ -1,4 +1,4 @@
-name: E23 Phase 1.4 GPS Map APK
+name: E23 Phase 1.5 GPS Live Fix APK
 
 on:
   push:
@@ -68,15 +68,15 @@ jobs:
           APK=android/app/build/outputs/apk/debug/app-debug.apk
           SIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
           "$SIGNER" verify --verbose "$APK"
-          cp "$APK" "E23跑起来_Phase1.4_Codex_GPS_Map_Fix.apk"
-          sha256sum "E23跑起来_Phase1.4_Codex_GPS_Map_Fix.apk" > apk-sha256.txt
+          cp "$APK" "E23跑起来_Phase1.5_GPS_Live_Fix.apk"
+          sha256sum "E23跑起来_Phase1.5_GPS_Live_Fix.apk" > apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: E23跑起来_Phase1.4_Codex_GPS_Map_Fix
+          name: E23跑起来_Phase1.5_GPS_Live_Fix
           path: |
-            E23跑起来_Phase1.4_Codex_GPS_Map_Fix.apk
+            E23跑起来_Phase1.5_GPS_Live_Fix.apk
             apk-sha256.txt
           if-no-files-found: error
           retention-days: 14

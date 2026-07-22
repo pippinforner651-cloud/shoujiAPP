@@ -20,6 +20,9 @@ export class NativeRunClient {
   stopRun() { return this.plugin.stopRun(); }
   abandonRun() { return this.plugin.abandonRun(); }
   recoverActiveRun() { return this.plugin.recoverActiveRun(); }
+  getDiagnostics() { return this.plugin.getDiagnostics(); }
+  openAppLocationSettings() { return this.plugin.openAppLocationSettings(); }
+  openSystemLocationSettings() { return this.plugin.openSystemLocationSettings(); }
 
   addLocationListener(listener: (point: RunTrackPoint) => void): Promise<PluginListenerHandle> {
     return this.plugin.addListener('locationUpdate', (point) => listener(mapTrackPoint(point)));

@@ -47,6 +47,8 @@ export interface GpsRunPlugin {
 
   /** 获取GPS诊断信息 */
   getDiagnostics(): Promise<DiagnosticsResponse>;
+  openAppLocationSettings(): Promise<void>;
+  openSystemLocationSettings(): Promise<void>;
 
   /** 导出诊断日志文本 */
   exportDiagnosticLog(): Promise<{ log: string }>;
@@ -115,7 +117,12 @@ export interface TrackPointResponse {
 export interface OutdoorReadiness {
   fineLocationGranted: boolean;
   coarseLocationGranted: boolean;
+  locationPermission: 'precise' | 'approximate' | 'denied';
+  systemLocationEnabled: boolean;
   gpsEnabled: boolean;
+  networkEnabled: boolean;
+  notificationPermissionGranted: boolean;
+  foregroundServicePermissionGranted: boolean;
   ready: boolean;
 }
 
@@ -140,6 +147,15 @@ export interface DiagnosticsResponse {
   phoneModel: string;
   androidVersion: string;
   sdkVersion: number;
+  pluginLoaded?: boolean;
+  fineLocationGranted?: boolean;
+  coarseLocationGranted?: boolean;
+  locationPermission?: 'precise' | 'approximate' | 'denied';
+  systemLocationEnabled?: boolean;
+  gpsEnabled?: boolean;
+  networkEnabled?: boolean;
+  notificationPermissionGranted?: boolean;
+  foregroundServicePermissionGranted?: boolean;
   serviceRunning: boolean;
   runState?: number;
   activityId?: string;
@@ -162,6 +178,13 @@ export interface DiagnosticsResponse {
   sqliteWriteFailed?: number;
   firstFixReceived?: boolean;
   distMode?: number;
+  locationRequestSucceeded?: boolean;
+  gpsCallbackCount?: number;
+  networkCallbackCount?: number;
+  passiveCallbackCount?: number;
+  firstCallbackProvider?: string;
+  lastCallbackProvider?: string;
+  lastRejectReason?: string;
 }
 
 // 注册插件

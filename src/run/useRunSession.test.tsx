@@ -10,6 +10,9 @@ function client(overrides = {}) {
     addStatsListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
     recoverActiveRun: vi.fn().mockResolvedValue({}),
     loadFullTrack: vi.fn().mockResolvedValue([]),
+    getDiagnostics: vi.fn().mockResolvedValue({ serviceRunning: true, locationRequestSucceeded: true, gpsCallbackCount: 1, firstFixReceived: true }),
+    openAppLocationSettings: vi.fn().mockResolvedValue(undefined),
+    openSystemLocationSettings: vi.fn().mockResolvedValue(undefined),
     checkOutdoorReadiness: vi.fn(), prepareOutdoorRun: vi.fn(), cancelPreparation: vi.fn(),
     startRun: vi.fn(), pauseRun: vi.fn(), resumeRun: vi.fn(), stopRun: vi.fn(), abandonRun: vi.fn(),
     ...overrides,
@@ -37,5 +40,27 @@ describe('useRunSession', () => {
     await act(() => result.current.finish());
     expect(result.current.state.geoTrail).toEqual([point]);
     expect(result.current.state.uploadedTrackPointCount).toBe(1);
+  });
+
+  it('blocks an official run while the native service has no GPS callback', async () => {
+    const api = client({
+      getDiagnostics: vi.fn().mockResolvedValue({ serviceRunning: true, locationRequestSucceeded: true, gpsCallbackCount: 0, firstFixReceived: false }),
+      startRun: vi.fn().mockResolvedValue({ clientActivityId: 'must-not-start', startTimeMs: 20 }),
+    });
+    const { result } = renderHook(() => useRunSession(api));
+    await act(async () => {
+      await expect(result.current.start()).rejects.toThrow('GPS');
+    });
+    expect(api.startRun).not.toHaveBeenCalled();
+  });
+
+  it('allows weak-signal start only after at least one real GPS callback', async () => {
+    const api = client({
+      getDiagnostics: vi.fn().mockResolvedValue({ serviceRunning: true, locationRequestSucceeded: true, gpsCallbackCount: 1, firstFixReceived: false }),
+      startRun: vi.fn().mockResolvedValue({ clientActivityId: 'weak-gps-run', startTimeMs: 20 }),
+    });
+    const { result } = renderHook(() => useRunSession(api));
+    await act(() => result.current.start());
+    expect(api.startRun).toHaveBeenCalledOnce();
   });
 });

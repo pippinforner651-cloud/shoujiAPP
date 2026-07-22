@@ -24,8 +24,14 @@ export function RunMap({ mode, currentPoint, track, accuracyM, follow, onFollowC
     if (!container.current) return;
     const map = adapterFactory();
     adapter.current = map;
-    map.mount(container.current, { onUserInteraction: () => onFollowChange(false), onError: setError });
-    return () => { map.destroy(); adapter.current = null; };
+    let alive = true;
+    const reportError = (message: string) => window.queueMicrotask(() => { if (alive) setError(message); });
+    try {
+      map.mount(container.current, { onUserInteraction: () => onFollowChange(false), onError: reportError });
+    } catch (cause) {
+      reportError(`地图初始化失败，GPS仍在记录：${cause instanceof Error ? cause.message : '未知错误'}`);
+    }
+    return () => { alive = false; map.destroy(); adapter.current = null; };
   }, [adapterFactory, onFollowChange]);
 
   useEffect(() => { adapter.current?.setCurrentPosition(currentPoint, accuracyM); }, [currentPoint, accuracyM]);
@@ -36,6 +42,9 @@ export function RunMap({ mode, currentPoint, track, accuracyM, follow, onFollowC
   return <div className="run-map-shell">
     <div ref={container} className="run-map-canvas" aria-label="跑步实时地图" />
     {error && <div className="run-map-error">{error}</div>}
+    <div className="run-map-coordinate">{currentPoint
+      ? `${currentPoint.lat.toFixed(6)}, ${currentPoint.lon.toFixed(6)}`
+      : '等待GPS · 默认深圳'}</div>
     {!follow && <button type="button" className="run-map-follow" onClick={() => onFollowChange(true)}>重新定位</button>}
   </div>;
 }
