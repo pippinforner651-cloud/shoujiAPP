@@ -79,6 +79,7 @@ describe('Phase 1.4 APK workflow contract', () => {
     for (const required of ['codex/e23-phase1-gps-map-fix', 'java-version: 21', 'npm ci', 'tsc -b', 'npm run lint', 'npm run test:unit', 'npm run build', 'cap sync android', 'testDebugUnitTest', 'clean', 'assembleDebug', 'apksigner', 'verify --verbose', 'sha256sum', 'upload-artifact']) {
       expect(workflow).toContain(required);
     }
+    expect(workflow).not.toContain('testDebugUnitTest clean assembleDebug');
     expect(workflow).not.toContain('prisma migrate');
     expect(workflow).not.toContain('DATABASE_URL');
   });

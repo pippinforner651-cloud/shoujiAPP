@@ -53,9 +53,13 @@ jobs:
       - name: Capacitor sync
         run: npx cap sync android
 
-      - name: Android unit tests and clean build
+      - name: Android unit tests
         working-directory: android
-        run: ./gradlew testDebugUnitTest clean assembleDebug --no-daemon
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Android clean build
+        working-directory: android
+        run: ./gradlew clean assembleDebug --no-daemon
 
       - name: Verify signature and prepare artifact
         shell: bash
