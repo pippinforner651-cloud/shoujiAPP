@@ -25,7 +25,7 @@ export function RunMap({ mode, currentPoint, track, accuracyM, follow, onFollowC
     const map = adapterFactory();
     adapter.current = map;
     let alive = true;
-    const reportError = (message: string) => window.queueMicrotask(() => { if (alive) setError(message); });
+    const reportError = (message: string) => { if (alive) setError(message); };
     try {
       map.mount(container.current, { onUserInteraction: () => onFollowChange(false), onError: reportError });
     } catch (cause) {
