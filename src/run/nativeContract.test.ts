@@ -76,7 +76,7 @@ describe('native GPS contract', () => {
 describe('Phase 1.4 APK workflow contract', () => {
   it('is isolated to the Codex branch and runs every quality/build gate', () => {
     const workflow = existsSync(workflowPath) ? read('.github/workflows/codex-phase1-gps-map-apk.yml') : '';
-    for (const required of ['codex/e23-phase1-gps-map-fix', 'npm ci', 'tsc -b', 'npm run lint', 'npm run test:unit', 'npm run build', 'cap sync android', 'testDebugUnitTest', 'clean', 'assembleDebug', 'apksigner', 'verify --verbose', 'sha256sum', 'upload-artifact']) {
+    for (const required of ['codex/e23-phase1-gps-map-fix', 'java-version: 21', 'npm ci', 'tsc -b', 'npm run lint', 'npm run test:unit', 'npm run build', 'cap sync android', 'testDebugUnitTest', 'clean', 'assembleDebug', 'apksigner', 'verify --verbose', 'sha256sum', 'upload-artifact']) {
       expect(workflow).toContain(required);
     }
     expect(workflow).not.toContain('prisma migrate');
