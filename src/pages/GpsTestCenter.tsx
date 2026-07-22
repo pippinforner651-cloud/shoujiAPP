@@ -37,7 +37,7 @@ export default function GpsTestCenter({ onBack }: { onBack?: () => void }) {
       const d = await GpsRun.getDiagnostics();
       setEnv(d);
       setEnvDone(true);
-    } catch {}
+    } catch (_e) { /* 忽略非原生环境错误 */ }
   };
 
   const copyEnv = () => {
@@ -103,7 +103,7 @@ SQLite写入: ${env.sqliteWriteOk}
           if (d.gpsCallbackCount !== undefined) setTrackPoints(d.gpsCallbackCount);
           const lastLoc = d.lastLocationCallbackMs ? new Date(d.lastLocationCallbackMs).toLocaleTimeString() : '从未';
           addTrackLog(`回调:${d.gpsCallbackCount} acc:${d.lastAccuracy?.toFixed(1) ?? '-'}m 最近:${lastLoc}`);
-        } catch {}
+        } catch (_e) { /* 非原生环境忽略 */ }
       }, 2000);
       const secIv = window.setInterval(() => setTrackSeconds(s => {
         if (s >= 60) {
@@ -160,9 +160,9 @@ SQLite写入: ${env.sqliteWriteOk}
             <Row label="最近错误" value={env.lastError || '无'} alert={!!env.lastError} />
             <div className="flex flex-wrap gap-2 mt-3">
               <button onClick={copyEnv} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">{envCopyMsg || '📋 复制全部'}</button>
-              <button onClick={async () => { try { const r = await GpsRun.exportDiagnosticLog(); navigator.clipboard.writeText(r.log); } catch {} }} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">📤 导出日志</button>
-              <button onClick={() => { try { GpsRun.openAppLocationSettings(); } catch {} }} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">⚙️ 定位设置</button>
-              <button onClick={() => { try { GpsRun.openSystemLocationSettings(); } catch {} }} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">📍 系统定位</button>
+                            <button onClick={async () => { try { const r = await GpsRun.exportDiagnosticLog(); navigator.clipboard.writeText(r.log); } catch (_e) { /* 忽略 */ } }} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">📤 导出日志</button>
+              <button onClick={() => { try { GpsRun.openAppLocationSettings(); } catch (_e) { /* 忽略 */ } }} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">⚙️ 定位设置</button>
+              <button onClick={() => { try { GpsRun.openSystemLocationSettings(); } catch (_e) { /* 忽略 */ } }} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">📍 系统定位</button>
             </div>
           </div>
         ) : <p className="mt-3 text-xs text-red-400">检查失败</p>}
