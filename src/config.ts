@@ -16,7 +16,7 @@ export const CONFIG = {
   MAP_PROVIDER: import.meta.env.VITE_MAP_PROVIDER ?? 'static-pack',
   // 版本标识
   APP_EDITION: 'Kimi预览版',
-  APP_PHASE: 'Phase 1.3 GPS Fix',
+  APP_PHASE: 'Phase 1.4 Codex GPS Map Fix',
   // 构建时由 GitHub Actions 注入（本地开发为 local）
   COMMIT_SHA: (import.meta.env.VITE_COMMIT_SHA ?? 'local').slice(0, 7),
 };

@@ -31,7 +31,7 @@ describe('native GPS contract', () => {
   it('has a PREPARING state that does not create a database activity', () => {
     expect(state).toContain('STATE_PREPARING');
     expect(service).toContain('prepareRun()');
-    const preparingMethod = service.match(/private synchronized void prepareRun\(\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
+    const preparingMethod = service.match(/private synchronized void prepareRun\(\) \{([\s\S]*?)\n\s{4}\}/)?.[1] ?? '';
     expect(preparingMethod).not.toContain('createActivity');
   });
 
