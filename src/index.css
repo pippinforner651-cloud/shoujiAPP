@@ -79,3 +79,8 @@ body {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
+
+.run-map-shell { position: relative; width: 100%; min-height: 320px; overflow: hidden; border-radius: 24px; background: #e8edf0; }
+.run-map-canvas { width: 100%; min-height: 320px; }
+.run-map-error { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 500; padding: 10px 14px; border-radius: 12px; background: rgba(13,43,69,.9); color: #fff; text-align: center; font-size: 13px; }
+.run-map-follow { position: absolute; right: 14px; bottom: 14px; z-index: 500; border: 0; border-radius: 999px; padding: 10px 16px; background: #fff; color: #0d2b45; box-shadow: 0 4px 18px rgba(13,43,69,.18); }
