@@ -18,7 +18,7 @@ import java.util.UUID;
  */
 public class RunDatabaseHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "e23_run.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
 
     private static final String TABLE_ACTIVITY = "run_activity";
     private static final String TABLE_POINTS = "track_points";
@@ -58,6 +58,10 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
         "accepted INTEGER NOT NULL DEFAULT 1," +
         "rejection_reason TEXT," +
         "mock_location INTEGER NOT NULL DEFAULT 0," +
+        "provider TEXT NOT NULL DEFAULT ''," +
+        "calculated_speed REAL NOT NULL DEFAULT 0," +
+        "distance_delta REAL NOT NULL DEFAULT 0," +
+        "risk_flag TEXT," +
         "created_at_ms INTEGER NOT NULL," +
         "FOREIGN KEY (client_activity_id) REFERENCES " + TABLE_ACTIVITY + "(client_activity_id)" +
         ")";
@@ -84,7 +88,12 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // 生产环境需谨慎，当前V1不做升级
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE " + TABLE_POINTS + " ADD COLUMN provider TEXT NOT NULL DEFAULT ''");
+            db.execSQL("ALTER TABLE " + TABLE_POINTS + " ADD COLUMN calculated_speed REAL NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE " + TABLE_POINTS + " ADD COLUMN distance_delta REAL NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE " + TABLE_POINTS + " ADD COLUMN risk_flag TEXT");
+        }
     }
 
     // ===== 活动管理 =====
@@ -148,6 +157,15 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
         db.update(TABLE_ACTIVITY, cv, "client_activity_id = ?", new String[]{activityId});
     }
 
+    /** Preserve an unfinished record for audit without exposing it as a finished run. */
+    public void abandonActivity(String activityId, long endTimeMs) {
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues cv = new ContentValues();
+        cv.put("state", RunState.STATE_ABANDONED);
+        cv.put("end_time_ms", endTimeMs);
+        db.update(TABLE_ACTIVITY, cv, "client_activity_id = ?", new String[]{activityId});
+    }
+
     // ===== 轨迹点管理 =====
 
     /** 插入GPS轨迹点（每个点独立写入，坏点不影响其他点） */
@@ -165,6 +183,10 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
         cv.put("accepted", point.accepted ? 1 : 0);
         cv.put("rejection_reason", point.rejectionReason);
         cv.put("mock_location", point.mockLocation ? 1 : 0);
+        cv.put("provider", point.provider != null ? point.provider : "");
+        cv.put("calculated_speed", point.calculatedSpeed);
+        cv.put("distance_delta", point.distanceDelta);
+        cv.put("risk_flag", point.riskFlag);
         cv.put("created_at_ms", System.currentTimeMillis());
         return db.insert(TABLE_POINTS, null, cv);
     }
@@ -187,6 +209,10 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
                 cv.put("accepted", p.accepted ? 1 : 0);
                 cv.put("rejection_reason", p.rejectionReason);
                 cv.put("mock_location", p.mockLocation ? 1 : 0);
+                cv.put("provider", p.provider != null ? p.provider : "");
+                cv.put("calculated_speed", p.calculatedSpeed);
+                cv.put("distance_delta", p.distanceDelta);
+                cv.put("risk_flag", p.riskFlag);
                 cv.put("created_at_ms", System.currentTimeMillis());
                 db.insert(TABLE_POINTS, null, cv);
             }
@@ -203,8 +229,8 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = getReadableDatabase();
         Cursor c = db.rawQuery(
             "SELECT client_activity_id FROM " + TABLE_ACTIVITY +
-            " WHERE state != ? AND end_time_ms = 0 LIMIT 1",
-            new String[]{String.valueOf(RunState.STATE_IDLE)});
+            " WHERE state IN (?, ?) AND end_time_ms = 0 LIMIT 1",
+            new String[]{String.valueOf(RunState.STATE_RUNNING), String.valueOf(RunState.STATE_PAUSED)});
         try {
             if (c.moveToFirst()) return c.getString(0);
             return null;
@@ -292,6 +318,7 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
             s.rejectedPoints = c.getInt(c.getColumnIndexOrThrow("rejected_pts"));
             s.mockPoints = c.getInt(c.getColumnIndexOrThrow("mock_pts"));
             s.highSpeedPoints = c.getInt(c.getColumnIndexOrThrow("high_speed_pts"));
+            s.riskPoints = countRiskPoints(db, activityId);
             s.serverUploadState = c.getString(c.getColumnIndexOrThrow("server_upload_state"));
             return s;
         } catch (Exception e) {
@@ -322,6 +349,10 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
                 p.accepted = c.getInt(c.getColumnIndexOrThrow("accepted")) == 1;
                 p.rejectionReason = c.getString(c.getColumnIndexOrThrow("rejection_reason"));
                 p.mockLocation = c.getInt(c.getColumnIndexOrThrow("mock_location")) == 1;
+                p.provider = c.getString(c.getColumnIndexOrThrow("provider"));
+                p.calculatedSpeed = c.getDouble(c.getColumnIndexOrThrow("calculated_speed"));
+                p.distanceDelta = c.getDouble(c.getColumnIndexOrThrow("distance_delta"));
+                p.riskFlag = c.getString(c.getColumnIndexOrThrow("risk_flag"));
                 p.createdAtMs = c.getLong(c.getColumnIndexOrThrow("created_at_ms"));
                 points.add(p);
             }
@@ -357,10 +388,57 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
                 s.rejectedPoints = c.getInt(c.getColumnIndexOrThrow("rejected_pts"));
                 s.mockPoints = c.getInt(c.getColumnIndexOrThrow("mock_pts"));
                 s.highSpeedPoints = c.getInt(c.getColumnIndexOrThrow("high_speed_pts"));
+                s.riskPoints = countRiskPoints(db, s.clientActivityId);
                 s.serverUploadState = c.getString(c.getColumnIndexOrThrow("server_upload_state"));
                 list.add(s);
             }
             return list;
+        } finally {
+            c.close();
+        }
+    }
+
+    public int countTrackPoints(String activityId) {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = db.rawQuery(
+            "SELECT COUNT(*) FROM " + TABLE_POINTS + " WHERE client_activity_id = ?",
+            new String[]{activityId});
+        try {
+            return c.moveToFirst() ? c.getInt(0) : 0;
+        } finally {
+            c.close();
+        }
+    }
+
+    public RunState.TrackPoint loadLastAcceptedGpsPoint(String activityId) {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = db.rawQuery(
+            "SELECT * FROM " + TABLE_POINTS +
+            " WHERE client_activity_id = ? AND accepted = 1 AND provider = 'gps'" +
+            " ORDER BY device_timestamp_ms DESC LIMIT 1",
+            new String[]{activityId});
+        try {
+            if (!c.moveToFirst()) return null;
+            RunState.TrackPoint p = new RunState.TrackPoint();
+            p.latitude = c.getDouble(c.getColumnIndexOrThrow("latitude"));
+            p.longitude = c.getDouble(c.getColumnIndexOrThrow("longitude"));
+            p.accuracy = c.getFloat(c.getColumnIndexOrThrow("accuracy"));
+            p.timestampMs = c.getLong(c.getColumnIndexOrThrow("device_timestamp_ms"));
+            p.mockLocation = c.getInt(c.getColumnIndexOrThrow("mock_location")) == 1;
+            p.provider = c.getString(c.getColumnIndexOrThrow("provider"));
+            return p;
+        } finally {
+            c.close();
+        }
+    }
+
+    private int countRiskPoints(SQLiteDatabase db, String activityId) {
+        Cursor c = db.rawQuery(
+            "SELECT COUNT(*) FROM " + TABLE_POINTS +
+            " WHERE client_activity_id = ? AND risk_flag IS NOT NULL AND risk_flag != ''",
+            new String[]{activityId});
+        try {
+            return c.moveToFirst() ? c.getInt(0) : 0;
         } finally {
             c.close();
         }

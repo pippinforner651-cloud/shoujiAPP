@@ -14,6 +14,8 @@ public class RunState {
     public static final int STATE_IDLE = 0;
     public static final int STATE_RUNNING = 1;
     public static final int STATE_PAUSED = 2;
+    public static final int STATE_PREPARING = 3;
+    public static final int STATE_ABANDONED = 4;
 
     public String clientActivityId;
     public int state;
@@ -117,6 +119,10 @@ public class RunState {
         public String rejectionReason;
         public boolean mockLocation;
         public long createdAtMs;
+        public String provider;
+        public double calculatedSpeed;
+        public double distanceDelta;
+        public String riskFlag;
 
         public JSONObject toJson() throws JSONException {
             JSONObject obj = new JSONObject();
@@ -131,6 +137,10 @@ public class RunState {
             obj.put("rejectionReason", rejectionReason);
             obj.put("mock", mockLocation);
             obj.put("createdAt", createdAtMs);
+            obj.put("provider", provider != null ? provider : "");
+            obj.put("calculatedSpeed", calculatedSpeed);
+            obj.put("distanceDelta", distanceDelta);
+            obj.put("riskFlag", riskFlag != null ? riskFlag : "");
             return obj;
         }
 
@@ -148,6 +158,11 @@ public class RunState {
             if (p.rejectionReason != null && p.rejectionReason.isEmpty()) p.rejectionReason = null;
             p.mockLocation = obj.optBoolean("mock", false);
             p.createdAtMs = obj.optLong("createdAt", System.currentTimeMillis());
+            p.provider = obj.optString("provider", "");
+            p.calculatedSpeed = obj.optDouble("calculatedSpeed", 0);
+            p.distanceDelta = obj.optDouble("distanceDelta", 0);
+            p.riskFlag = obj.optString("riskFlag", null);
+            if (p.riskFlag != null && p.riskFlag.isEmpty()) p.riskFlag = null;
             return p;
         }
     }
@@ -197,6 +212,7 @@ public class RunState {
         public int rejectedPoints;
         public int mockPoints;
         public int highSpeedPoints;
+        public int riskPoints;
         public String serverUploadState;
     }
 

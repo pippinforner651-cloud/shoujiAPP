@@ -1,20 +1,26 @@
 package com.e23running.app.kimi.preview.run;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.os.Build;
 import android.util.Log;
+
+import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.List;
-import java.util.UUID;
 
 /**
  * E23跑起来 · Capacitor原生GPS跑步插件
@@ -35,7 +41,18 @@ import java.util.UUID;
  *   listFinishedActivities() → [RunSummary, ...]
  *   loadActivityTrackPoints(activityId, limit, offset) → [TrackPoint, ...]
  */
-@CapacitorPlugin(name = "GpsRun")
+@CapacitorPlugin(
+    name = "GpsRun",
+    permissions = {
+        @Permission(
+            alias = "location",
+            strings = {
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            }
+        )
+    }
+)
 public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListener {
     private static final String TAG = "E23GpsRunPlugin";
 
@@ -52,23 +69,61 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
     // ===== 运行控制 =====
 
     @PluginMethod
+    public void checkOutdoorReadiness(PluginCall call) {
+        if (!hasFineLocationPermission()) {
+            requestPermissionForAlias("location", call, "locationPermissionCallback");
+            return;
+        }
+        resolveOutdoorReadiness(call);
+    }
+
+    @PermissionCallback
+    private void locationPermissionCallback(PluginCall call) {
+        resolveOutdoorReadiness(call);
+    }
+
+    @PluginMethod
+    public void prepareOutdoorRun(PluginCall call) {
+        if (!hasFineLocationPermission()) {
+            call.reject("需要精确位置权限后才能开始户外跑");
+            return;
+        }
+        LocationManager manager = (LocationManager) getContext().getSystemService(android.content.Context.LOCATION_SERVICE);
+        boolean gpsEnabled = manager != null && manager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+        if (!gpsEnabled) {
+            call.reject("请先打开手机GPS定位开关");
+            return;
+        }
+        Intent intent = new Intent(getContext(), GpsRunService.class);
+        intent.setAction("PREPARE_RUN");
+        startForegroundServiceCompat(intent);
+        JSObject ret = new JSObject();
+        ret.put("preparing", true);
+        ret.put("gpsEnabled", true);
+        ret.put("activityCreated", false);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void cancelPreparation(PluginCall call) {
+        GpsRunService service = GpsRunService.getInstance();
+        if (service != null) service.cancelPreparation();
+        call.resolve();
+    }
+
+    @PluginMethod
     public void startRun(PluginCall call) {
         try {
-            String activityId = createNewActivity();
-            Intent intent = new Intent(getContext(), GpsRunService.class);
-            intent.setAction("START_RUN");
-            intent.putExtra("activityId", activityId);
-            intent.putExtra("startTimeMs", System.currentTimeMillis());
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                getContext().startForegroundService(intent);
-            } else {
-                getContext().startService(intent);
+            GpsRunService service = GpsRunService.getInstance();
+            if (service == null) {
+                call.reject("定位服务尚未准备完成，请稍候重试");
+                return;
             }
+            String activityId = service.startOfficialRun();
 
             JSObject ret = new JSObject();
             ret.put("clientActivityId", activityId);
-            ret.put("startTimeMs", System.currentTimeMillis());
+            ret.put("startTimeMs", service.getStartTimeMs());
             call.resolve(ret);
         } catch (Exception e) {
             Log.e(TAG, "startRun failed", e);
@@ -103,12 +158,22 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
     @PluginMethod
     public void stopRun(PluginCall call) {
         try {
-            Intent intent = new Intent(getContext(), GpsRunService.class);
-            intent.setAction("STOP_RUN");
-            getContext().startService(intent);
-            call.resolve();
+            GpsRunService service = GpsRunService.getInstance();
+            RunState.RunSummary summary = service != null ? service.stopRunAndReturnSummary() : null;
+            call.resolve(summary != null ? summaryToJS(summary) : new JSObject());
         } catch (Exception e) {
             call.reject("Failed to stop: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void abandonRun(PluginCall call) {
+        try {
+            GpsRunService service = GpsRunService.getInstance();
+            if (service != null) service.abandonRun();
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Failed to abandon: " + e.getMessage());
         }
     }
 
@@ -164,7 +229,7 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
         Intent intent = new Intent(getContext(), GpsRunService.class);
         intent.setAction("RECOVER_RUN");
         intent.putExtra("activityId", activeId);
-        getContext().startService(intent);
+        startForegroundServiceCompat(intent);
 
         // 查询数据库摘要
         RunState.RunSummary summary = dbHelper.loadSummary(activeId);
@@ -256,6 +321,10 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
             ret.put("accepted", point.accepted);
             ret.put("rejectionReason", point.rejectionReason != null ? point.rejectionReason : "");
             ret.put("mock", point.mockLocation);
+            ret.put("provider", point.provider != null ? point.provider : "");
+            ret.put("calculatedSpeed", point.calculatedSpeed);
+            ret.put("distanceDelta", point.distanceDelta);
+            ret.put("riskFlag", point.riskFlag != null ? point.riskFlag : "");
             notifyListeners("locationUpdate", ret);
         } catch (Exception e) {
             Log.w(TAG, "Error notifying location", e);
@@ -386,10 +455,31 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
 
     // ===== 辅助方法 =====
 
-    private String createNewActivity() {
-        String id = "run_" + UUID.randomUUID().toString().replace("-", "")
-                    + "_" + System.currentTimeMillis();
-        return dbHelper.createActivity(System.currentTimeMillis());
+    private boolean hasFineLocationPermission() {
+        return ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void resolveOutdoorReadiness(PluginCall call) {
+        boolean fineGranted = hasFineLocationPermission();
+        boolean coarseGranted = ContextCompat.checkSelfPermission(
+            getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        LocationManager manager = (LocationManager) getContext().getSystemService(android.content.Context.LOCATION_SERVICE);
+        boolean gpsEnabled = manager != null && manager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+        JSObject result = new JSObject();
+        result.put("fineLocationGranted", fineGranted);
+        result.put("coarseLocationGranted", coarseGranted);
+        result.put("gpsEnabled", gpsEnabled);
+        result.put("ready", fineGranted && gpsEnabled);
+        call.resolve(result);
+    }
+
+    private void startForegroundServiceCompat(Intent intent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getContext().startForegroundService(intent);
+        } else {
+            getContext().startService(intent);
+        }
     }
 
     private JSObject buildStatsJSObject(GpsRunService svc) {
@@ -426,6 +516,7 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
         ret.put("rejectedPoints", s.rejectedPoints);
         ret.put("mockPoints", s.mockPoints);
         ret.put("highSpeedPoints", s.highSpeedPoints);
+        ret.put("riskPoints", s.riskPoints);
         ret.put("serverUploadState", s.serverUploadState != null ? s.serverUploadState : "local");
         return ret;
     }
@@ -443,6 +534,7 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
         obj.put("rejectedPoints", s.rejectedPoints);
         obj.put("mockPoints", s.mockPoints);
         obj.put("highSpeedPoints", s.highSpeedPoints);
+        obj.put("riskPoints", s.riskPoints);
         obj.put("serverUploadState", s.serverUploadState != null ? s.serverUploadState : "local");
         return obj;
     }

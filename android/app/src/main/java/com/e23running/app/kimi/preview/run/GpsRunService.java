@@ -52,13 +52,6 @@ public class GpsRunService extends Service implements LocationListener {
     private static final String CHANNEL_ID = "e23_gps_run_channel";
     private static final int NOTIFICATION_ID = 1001;
 
-    // Location quality thresholds
-    // 分阶段精度策略：首点允许≤100m，后续要求≤50m
-    private static final float ACCURACY_FIRST_FIX_MAX = 100f;  // 首点最大允许精度
-    private static final float ACCURACY_RUNNING_MAX = 50f;     // 后续点最大允许精度
-    private static final float MIN_POINT_DISTANCE_M = 0.5f;    // 最小距离变化
-    private static final float MAX_SUSPICIOUS_SPEED = 15f;     // 可疑速度 m/s
-
     // Distance computation mode
     private static final int DIST_MODE_FIRST_FIX = 0;  // 首点，不累计距离
     private static final int DIST_MODE_WARM_UP = 1;     // 精度一般，候选
@@ -96,6 +89,7 @@ public class GpsRunService extends Service implements LocationListener {
     private LocationManager locationManager;
     private PowerManager.WakeLock wakeLock;
     private RunDatabaseHelper dbHelper;
+    private final GpsPointEvaluator pointEvaluator = new GpsPointEvaluator();
 
     // 后台HandlerThread用于LocationManager回调（锁屏时主线程可能休眠）
     private HandlerThread locationThread;
@@ -214,6 +208,9 @@ public class GpsRunService extends Service implements LocationListener {
             String activeId = dbHelper.findActiveRun();
             if (activeId != null) {
                 recoverRun(activeId);
+            } else {
+                stopSelf();
+                return START_NOT_STICKY;
             }
             return START_STICKY;
         }
@@ -221,16 +218,20 @@ public class GpsRunService extends Service implements LocationListener {
         String action = intent.getAction();
         diagEvent(DIAG_SERVICE_START, "Action: " + action);
 
-        if ("START_RUN".equals(action)) {
-            String activityId = intent.getStringExtra("activityId");
-            long startTs = intent.getLongExtra("startTimeMs", System.currentTimeMillis());
-            startRun(activityId, startTs);
+        if ("PREPARE_RUN".equals(action)) {
+            prepareRun();
+        } else if ("START_RUN".equals(action)) {
+            startOfficialRun();
+        } else if ("CANCEL_PREPARATION".equals(action)) {
+            cancelPreparation();
         } else if ("PAUSE_RUN".equals(action)) {
             pauseRun();
         } else if ("RESUME_RUN".equals(action)) {
             resumeRun();
         } else if ("STOP_RUN".equals(action)) {
-            stopRun();
+            stopRunAndReturnSummary();
+        } else if ("ABANDON_RUN".equals(action)) {
+            abandonRun();
         } else if ("RECOVER_RUN".equals(action)) {
             String recoverId = intent.getStringExtra("activityId");
             recoverRun(recoverId);
@@ -424,7 +425,7 @@ public class GpsRunService extends Service implements LocationListener {
             + " acc=" + (location.hasAccuracy() ? location.getAccuracy() : "N/A")
             + " screenOff=" + screenOff);
 
-        if (runState != RunState.STATE_RUNNING) return;
+        if (runState != RunState.STATE_PREPARING && runState != RunState.STATE_RUNNING) return;
 
         long now = System.currentTimeMillis();
         lastAccuracy = location.hasAccuracy() ? location.getAccuracy() : 999f;
@@ -439,67 +440,78 @@ public class GpsRunService extends Service implements LocationListener {
         point.timestampMs = location.getTime();
         point.mockLocation = location.isFromMockProvider();
         point.createdAtMs = now;
+        point.provider = location.getProvider();
 
-        // 质量过滤
-        String rejection = validatePoint(point, now);
-        if (rejection != null) {
-            point.accepted = false;
-            point.rejectionReason = rejection;
-            rejectedPointCount++;
-            diagEvent(DIAG_LOCATION_REJECTED, rejection);
+        GpsPointEvaluator.Sample sample = new GpsPointEvaluator.Sample();
+        sample.provider = point.provider;
+        sample.latitude = point.latitude;
+        sample.longitude = point.longitude;
+        sample.accuracy = point.accuracy;
+        sample.timestampMs = point.timestampMs;
+        sample.mockLocation = point.mockLocation;
+        boolean officialRun = runState == RunState.STATE_RUNNING;
+        GpsPointEvaluator.Result evaluation = pointEvaluator.evaluate(sample, officialRun);
+        point.accepted = evaluation.accepted;
+        point.rejectionReason = evaluation.rejectionReason;
+        point.calculatedSpeed = evaluation.calculatedSpeedMps;
+        point.distanceDelta = evaluation.distanceDeltaM;
+        point.riskFlag = evaluation.riskFlag;
+        firstFixReceived = pointEvaluator.hasFirstFix();
+        distMode = firstFixReceived ? DIST_MODE_ACCURATE : DIST_MODE_FIRST_FIX;
+
+        if (!point.accepted) {
+            if (officialRun) rejectedPointCount++;
+            diagEvent(DIAG_LOCATION_REJECTED, point.rejectionReason);
         } else {
-            point.accepted = true;
-            validPointCount++;
+            if (officialRun) validPointCount++;
             diagEvent(DIAG_LOCATION_ACCEPTED,
-                "distDelta=" + (hasLastPoint ? haversineM(lastLat, lastLon, point.latitude, point.longitude) : 0)
-                + " totalDist=" + totalDistanceM);
-
-            double delta = 0;
-            if (hasLastPoint) {
-                delta = haversineM(lastLat, lastLon, point.latitude, point.longitude);
-                totalDistanceM += delta;
-                splitDistanceM += delta;
+                "distDelta=" + point.distanceDelta + " totalDist=" + totalDistanceM);
+            if (officialRun) {
+                totalDistanceM += point.distanceDelta;
+                splitDistanceM += point.distanceDelta;
+                if (lastPointTimestamp > 0 && point.timestampMs > lastPointTimestamp) {
+                    totalMovingDurationMs += point.timestampMs - lastPointTimestamp;
+                }
+                checkSplit(now);
             }
             lastLat = point.latitude;
             lastLon = point.longitude;
             hasLastPoint = true;
-            lastPointTimestamp = now;
-
-            totalMovingDurationMs += 1000;
-            checkSplit(now);
+            lastPointTimestamp = point.timestampMs;
         }
 
-        // ★ 每个点独立写入SQLite
-        try {
-            long rowId = dbHelper.insertTrackPoint(currentActivityId, point);
-            if (rowId > 0) {
-                lastSqliteWriteMs = System.currentTimeMillis();
-                diagEvent(DIAG_SQLITE_WRITE_OK, "rowId=" + rowId);
-            } else {
-                diagEvent(DIAG_SQLITE_WRITE_FAILED, "insert returned " + rowId);
+        // PREPARING establishes readiness without creating an activity or writing track data.
+        if (officialRun && currentActivityId != null) {
+            try {
+                long rowId = dbHelper.insertTrackPoint(currentActivityId, point);
+                if (rowId > 0) {
+                    lastSqliteWriteMs = System.currentTimeMillis();
+                    diagEvent(DIAG_SQLITE_WRITE_OK, "rowId=" + rowId);
+                } else {
+                    diagEvent(DIAG_SQLITE_WRITE_FAILED, "insert returned " + rowId);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "SQLite write failed", e);
+                diagEvent(DIAG_SQLITE_WRITE_FAILED, e.getMessage());
+                lastError = "SQLite write: " + e.getMessage();
             }
-        } catch (Exception e) {
-            Log.e(TAG, "SQLite write failed", e);
-            diagEvent(DIAG_SQLITE_WRITE_FAILED, e.getMessage());
-            lastError = "SQLite write: " + e.getMessage();
-        }
 
-        // 更新活动状态
-        try {
-            dbHelper.updateActivityState(
-                currentActivityId, runState, 0,
-                totalDistanceM, totalPausedMs, totalMovingDurationMs,
-                runState == RunState.STATE_RUNNING ? now - startTimeMs - totalPausedMs : 0,
-                currentSplitIndex, splitDistanceM, lastPauseStartMs);
-        } catch (Exception e) {
-            Log.w(TAG, "Activity state update failed", e);
+            try {
+                dbHelper.updateActivityState(
+                    currentActivityId, runState, 0,
+                    totalDistanceM, totalPausedMs, totalMovingDurationMs,
+                    now - startTimeMs - totalPausedMs,
+                    currentSplitIndex, splitDistanceM, lastPauseStartMs);
+            } catch (Exception e) {
+                Log.w(TAG, "Activity state update failed", e);
+            }
         }
 
         // 更新通知（锁屏时通知更新会显示在锁屏界面上）
         String distStr = String.format(Locale.CHINA, "%.2f km", totalDistanceM / 1000);
-        long elapsedSec = (now - startTimeMs - totalPausedMs) / 1000;
+        long elapsedSec = officialRun ? (now - startTimeMs - totalPausedMs) / 1000 : 0;
         String durStr = String.format(Locale.CHINA, "%02d:%02d", elapsedSec / 60, elapsedSec % 60);
-        updateNotification("E23跑起来正在记录", distStr, durStr);
+        updateNotification(officialRun ? "E23跑起来正在记录" : "E23正在获取GPS", distStr, durStr);
 
         // 回调解JS层
         notifyJS(point, now);
@@ -526,47 +538,6 @@ public class GpsRunService extends Service implements LocationListener {
         notifyState("GPS信号丢失，请检查定位开关");
     }
 
-    // ===== 质量过滤（分阶段精度策略） =====
-
-    private String validatePoint(RunState.TrackPoint point, long now) {
-        // 首点：允许≤100m精度，仅记录位置不累计距离
-        if (!firstFixReceived) {
-            if (point.accuracy <= ACCURACY_FIRST_FIX_MAX) {
-                firstFixReceived = true;
-                distMode = (point.accuracy <= ACCURACY_RUNNING_MAX) ? DIST_MODE_ACCURATE : DIST_MODE_WARM_UP;
-                lastLat = point.latitude;
-                lastLon = point.longitude;
-                hasLastPoint = true;
-                lastPointTimestamp = now;
-                // 首点接受但不累计距离
-                return null; // accepted - no rejection
-            }
-            return "first_fix_accuracy:" + point.accuracy + "(>" + ACCURACY_FIRST_FIX_MAX + ")";
-        }
-
-        // 已有首点后的精度过滤
-        float accuracyLimit = ACCURACY_RUNNING_MAX;
-        if (point.accuracy > accuracyLimit) {
-            return "accuracy_too_low:" + point.accuracy;
-        }
-        // 时间倒退
-        if (lastPointTimestamp > 0 && point.timestampMs < lastPointTimestamp) {
-            return "time_regression";
-        }
-        // 重复点（0.5m内不记录）
-        if (hasLastPoint) {
-            double d = haversineM(lastLat, lastLon, point.latitude, point.longitude);
-            if (d < MIN_POINT_DISTANCE_M) {
-                return "duplicate_point:" + String.format(Locale.US, "%.1f", d) + "m";
-            }
-        }
-        // 模拟定位
-        if (point.mockLocation) {
-            return "mock_location";
-        }
-        return null; // valid
-    }
-
     // ===== 分段管理 =====
 
     private void checkSplit(long now) {
@@ -591,28 +562,21 @@ public class GpsRunService extends Service implements LocationListener {
         }
     }
 
-    // ===== Haversine =====
-
-    private double haversineM(double lat1, double lon1, double lat2, double lon2) {
-        final double R = 6371000;
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-            + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-            * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        return 2 * R * Math.asin(Math.sqrt(a));
-    }
-
     // ===== 运行控制 =====
 
-    private synchronized void startRun(String activityId, long startTs) {
-        currentActivityId = activityId;
-        runState = RunState.STATE_RUNNING;
-        startTimeMs = startTs;
+    private synchronized void prepareRun() {
+        if (runState == RunState.STATE_RUNNING || runState == RunState.STATE_PAUSED) return;
+        if (runState == RunState.STATE_PREPARING) return;
+        currentActivityId = null;
+        runState = RunState.STATE_PREPARING;
+        startTimeMs = 0;
         totalDistanceM = 0;
         totalPausedMs = 0;
         totalMovingDurationMs = 0;
         hasLastPoint = false;
+        pointEvaluator.reset();
+        firstFixReceived = false;
+        distMode = DIST_MODE_FIRST_FIX;
         validPointCount = 0;
         rejectedPointCount = 0;
         currentSplitIndex = 0;
@@ -628,11 +592,46 @@ public class GpsRunService extends Service implements LocationListener {
 
         acquireWakeLock();
         startGps();
+        updateNotification("E23正在获取GPS", "尚未开始", "等待定位");
+        notifyState("正在获取GPS，尚未创建跑步记录");
+        notifyJSStats();
+    }
+
+    public synchronized String startOfficialRun() {
+        if (currentActivityId != null &&
+            (runState == RunState.STATE_RUNNING || runState == RunState.STATE_PAUSED)) {
+            return currentActivityId;
+        }
+        if (runState != RunState.STATE_PREPARING) {
+            throw new IllegalStateException("请先完成户外跑定位准备");
+        }
+        long startTs = System.currentTimeMillis();
+        String activityId = dbHelper.createActivity(startTs);
+        currentActivityId = activityId;
+        runState = RunState.STATE_RUNNING;
+        startTimeMs = startTs;
+        validPointCount = 0;
+        rejectedPointCount = 0;
+        lastPointTimestamp = pointEvaluator.getBaseline() != null
+            ? pointEvaluator.getBaseline().timestampMs : 0;
 
         Log.i(TAG, "Run started: " + activityId);
         diagEvent(DIAG_SERVICE_START, "Run started: " + activityId);
         notifyState("跑步进行中");
         notifyJSStats();
+        return activityId;
+    }
+
+    public synchronized void cancelPreparation() {
+        if (runState != RunState.STATE_PREPARING) return;
+        stopGps();
+        releaseWakeLock();
+        pointEvaluator.reset();
+        firstFixReceived = false;
+        currentActivityId = null;
+        runState = RunState.STATE_IDLE;
+        notifyState("已取消定位准备");
+        stopSelf();
     }
 
     private synchronized void pauseRun() {
@@ -678,8 +677,8 @@ public class GpsRunService extends Service implements LocationListener {
         notifyJSStats();
     }
 
-    private synchronized void stopRun() {
-        if (currentActivityId == null) return;
+    public synchronized RunState.RunSummary stopRunAndReturnSummary() {
+        if (currentActivityId == null) return null;
         long now = System.currentTimeMillis();
 
         if (runState == RunState.STATE_PAUSED && !pauseList.isEmpty()) {
@@ -734,6 +733,28 @@ public class GpsRunService extends Service implements LocationListener {
         Log.i(TAG, "Run finished: " + currentActivityId + " distance=" + totalDistanceM + "m");
         currentActivityId = null;
         runState = RunState.STATE_IDLE;
+        pointEvaluator.reset();
+        stopSelf();
+        return summary;
+    }
+
+    public synchronized void abandonRun() {
+        if (runState == RunState.STATE_PREPARING) {
+            cancelPreparation();
+            return;
+        }
+        if (currentActivityId == null) return;
+        long now = System.currentTimeMillis();
+        stopGps();
+        releaseWakeLock();
+        dbHelper.updateActivityState(currentActivityId, RunState.STATE_ABANDONED, now,
+            totalDistanceM, totalPausedMs, totalMovingDurationMs,
+            Math.max(0, now - startTimeMs), currentSplitIndex, splitDistanceM, lastPauseStartMs);
+        dbHelper.abandonActivity(currentActivityId, now);
+        currentActivityId = null;
+        runState = RunState.STATE_IDLE;
+        pointEvaluator.reset();
+        notifyState("本次跑步已放弃，审计记录已保留");
         stopSelf();
     }
 
@@ -760,6 +781,28 @@ public class GpsRunService extends Service implements LocationListener {
         splitList.addAll(rs.splitInfos);
         pauseList.clear();
         pauseList.addAll(rs.pausePeriods);
+
+        RunState.TrackPoint lastAccepted = dbHelper.loadLastAcceptedGpsPoint(activityId);
+        if (lastAccepted != null) {
+            GpsPointEvaluator.Sample sample = new GpsPointEvaluator.Sample();
+            sample.provider = lastAccepted.provider;
+            sample.latitude = lastAccepted.latitude;
+            sample.longitude = lastAccepted.longitude;
+            sample.accuracy = lastAccepted.accuracy;
+            sample.timestampMs = lastAccepted.timestampMs;
+            sample.mockLocation = lastAccepted.mockLocation;
+            pointEvaluator.restoreBaseline(sample);
+            firstFixReceived = true;
+            hasLastPoint = true;
+            lastLat = lastAccepted.latitude;
+            lastLon = lastAccepted.longitude;
+            lastPointTimestamp = lastAccepted.timestampMs;
+        }
+        RunState.RunSummary summary = dbHelper.loadSummary(activityId);
+        if (summary != null) {
+            validPointCount = Math.max(0, summary.totalPoints - summary.rejectedPoints);
+            rejectedPointCount = summary.rejectedPoints;
+        }
 
         if (runState == RunState.STATE_RUNNING) {
             runState = RunState.STATE_PAUSED; // 恢复为暂停，等待用户手动resume
