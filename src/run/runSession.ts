@@ -56,6 +56,7 @@ export type RunSessionEvent =
   | { type: 'PAUSED' }
   | { type: 'RESUMED' }
   | { type: 'RECOVERED'; activityId: string; startTimeMs: number; distanceM: number; durationSec: number; points: RunTrackPoint[] }
+  | { type: 'TRACK_HYDRATED'; points: RunTrackPoint[] }
   | { type: 'DONE' }
   | { type: 'MANUAL' }
   | { type: 'SET_GOAL'; goalType: Exclude<GoalType, 'NONE'>; goalValue: number }
@@ -161,6 +162,17 @@ export function runSessionReducer(state: RunSessionState, event: RunSessionEvent
     }
     case 'DONE':
       return { ...state, phase: 'done' };
+    case 'TRACK_HYDRATED': {
+      const geoTrail = event.points.filter((point) => point.accepted && point.provider === 'gps');
+      return {
+        ...state,
+        allTrackPoints: [...event.points],
+        geoTrail,
+        currentPoint: event.points.at(-1) ?? null,
+        locationEventCount: event.points.length,
+        ...countPoints(event.points),
+      };
+    }
     case 'MANUAL':
       return { ...state, phase: 'manual' };
     case 'SET_GOAL':

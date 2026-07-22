@@ -4,9 +4,12 @@
 // React层不再使用 watchPosition，所有GPS采集由原生层管理
 // ============================================================
 
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 
 export interface GpsRunPlugin {
+  checkOutdoorReadiness(): Promise<OutdoorReadiness>;
+  prepareOutdoorRun(): Promise<{ preparing: boolean; gpsEnabled: boolean; activityCreated: false }>;
+  cancelPreparation(): Promise<void>;
   /** 开始跑步 → 启动Foreground Service + GPS */
   startRun(): Promise<{ clientActivityId: string; startTimeMs: number }>;
 
@@ -17,7 +20,8 @@ export interface GpsRunPlugin {
   resumeRun(): Promise<void>;
 
   /** 结束跑步（停止Service + 通知） */
-  stopRun(): Promise<void>;
+  stopRun(): Promise<Partial<RunSummaryResponse>>;
+  abandonRun(): Promise<void>;
 
   /** 获取当前跑步状态 */
   getRunState(): Promise<RunStateResponse>;
@@ -46,12 +50,16 @@ export interface GpsRunPlugin {
 
   /** 导出诊断日志文本 */
   exportDiagnosticLog(): Promise<{ log: string }>;
+
+  addListener(eventName: 'locationUpdate', listener: (event: TrackPointResponse) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'statsUpdate', listener: (event: StatsResponse) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'serviceStateChange', listener: (event: { state: number; message: string }) => void): Promise<PluginListenerHandle>;
 }
 
 // ===== 类型定义 =====
 
 export interface RunStateResponse {
-  state: number;          // 0=IDLE, 1=RUNNING, 2=PAUSED
+  state: number;          // 0=IDLE, 1=RUNNING, 2=PAUSED, 3=PREPARING, 4=ABANDONED
   clientActivityId?: string;
   startTimeMs?: number;
   totalDistanceM?: number;
@@ -98,6 +106,17 @@ export interface TrackPointResponse {
   accepted: boolean;
   rejectionReason: string;
   mock: boolean;
+  provider: string;
+  calculatedSpeed: number;
+  distanceDelta: number;
+  riskFlag: string;
+}
+
+export interface OutdoorReadiness {
+  fineLocationGranted: boolean;
+  coarseLocationGranted: boolean;
+  gpsEnabled: boolean;
+  ready: boolean;
 }
 
 export interface RunSummaryResponse {
@@ -112,6 +131,7 @@ export interface RunSummaryResponse {
   rejectedPoints: number;
   mockPoints: number;
   highSpeedPoints: number;
+  riskPoints: number;
   serverUploadState: string;
 }
 
