@@ -125,5 +125,54 @@ function Metrics({ distanceM, durationSec, pace, kcal }: { distanceM: number; du
 }
 
 function GoalEditor({ state, dispatch }: { state: { goalType: GoalType; goalValue: number }; dispatch: (event: { type: 'SET_GOAL'; goalType: Exclude<GoalType, 'NONE'>; goalValue: number } | { type: 'CLEAR_GOAL' }) => void }) {
-  return <div className="rounded-2xl bg-slate-900 p-4"><div className="flex items-center justify-between"><span className="font-bold">本次目标（可选）</span><button className="text-xs text-slate-400" onClick={() => dispatch({ type: 'CLEAR_GOAL' })}>清除</button></div><div className="grid grid-cols-3 gap-2 mt-3">{(['DISTANCE', 'DURATION', 'CALORIES'] as const).map((type) => <button key={type} className={`py-2 rounded-xl text-xs ${state.goalType === type ? 'bg-orange-500' : 'bg-slate-800'}`} onClick={() => dispatch({ type: 'SET_GOAL', goalType: type, goalValue: type === 'DISTANCE' ? 5000 : type === 'DURATION' ? 1800 : 300 })}>{type === 'DISTANCE' ? '5公里' : type === 'DURATION' ? '30分钟' : '300千卡'}</button>)}</div></div>;
+  const [customVal, setCustomVal] = useState('');
+  const goalType = state.goalType;
+  const goalValue = state.goalValue;
+  return <div className="rounded-2xl bg-slate-900 p-4">
+    <div className="flex items-center justify-between mb-2">
+      <span className="font-bold text-sm">本次目标（可选）</span>
+      {goalType !== 'NONE' && <button className="text-xs text-slate-400 underline" onClick={() => dispatch({ type: 'CLEAR_GOAL' })}>清除目标</button>}
+    </div>
+    {/* 目标类型选择 */}
+    <div className="flex gap-1.5 flex-wrap mb-3">
+      {(['NONE', 'DISTANCE', 'DURATION', 'CALORIES'] as GoalType[]).map((t) => (
+        <button key={t} onClick={() => { if (t === 'NONE') dispatch({ type: 'CLEAR_GOAL' }); else dispatch({ type: 'SET_GOAL', goalType: t, goalValue: t === 'DISTANCE' ? 5000 : t === 'DURATION' ? 1800 : 300 }); setCustomVal(''); }}
+          className={`px-2.5 py-1 rounded-full text-xs font-bold ${goalType === t ? 'bg-orange-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
+          {{ NONE: '无目标', DISTANCE: '距离', DURATION: '时长', CALORIES: '热量' }[t]}
+        </button>
+      ))}
+    </div>
+    {goalType === 'DISTANCE' && <div className="space-y-1.5">
+      <div className="flex gap-1 flex-wrap">
+        {[3, 5, 10, 21.1, 42.2].map(v => <button key={v} onClick={() => { dispatch({ type: 'SET_GOAL', goalType: 'DISTANCE', goalValue: v * 1000 }); setCustomVal(''); }}
+          className={`px-2.5 py-1 rounded text-xs font-bold ${goalValue === v * 1000 ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400'}`}>{v < 30 ? v + 'km' : v === 21.1 ? '半马' : '全马'}</button>)}
+      </div>
+      <input type="number" value={customVal} onChange={e => { const v = parseFloat(e.target.value); setCustomVal(e.target.value); if (v > 0 && v <= 200) dispatch({ type: 'SET_GOAL', goalType: 'DISTANCE', goalValue: v * 1000 }); }}
+        placeholder="自定义公里数" className="w-full px-3 py-2 rounded-xl bg-slate-800 text-white text-xs outline-none placeholder:text-slate-500" />
+    </div>}
+    {goalType === 'DURATION' && <div className="space-y-1.5">
+      <div className="flex gap-1 flex-wrap">
+        {[20, 30, 45, 60].map(v => <button key={v} onClick={() => { dispatch({ type: 'SET_GOAL', goalType: 'DURATION', goalValue: v * 60 }); setCustomVal(''); }}
+          className={`px-2.5 py-1 rounded text-xs font-bold ${goalValue === v * 60 ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400'}`}>{v}分钟</button>)}
+      </div>
+      <div className="flex gap-2 items-center">
+        <input type="number" placeholder="时" min="0" onChange={e => { const h = parseInt(e.target.value) || 0; const m = Math.floor((goalValue % 3600) / 60); dispatch({ type: 'SET_GOAL', goalType: 'DURATION', goalValue: (h * 60 + m) * 60 }); }}
+          className="w-16 px-3 py-2 rounded-xl bg-slate-800 text-white text-xs outline-none placeholder:text-slate-500" />
+        <span className="text-xs text-slate-500">时</span>
+        <input type="number" placeholder="分" min="0" max="59" onChange={e => { const m = parseInt(e.target.value) || 0; const h = Math.floor(goalValue / 3600); dispatch({ type: 'SET_GOAL', goalType: 'DURATION', goalValue: (h * 60 + m) * 60 }); }}
+          className="w-16 px-3 py-2 rounded-xl bg-slate-800 text-white text-xs outline-none placeholder:text-slate-500" />
+        <span className="text-xs text-slate-500">分</span>
+      </div>
+    </div>}
+    {goalType === 'CALORIES' && <div className="space-y-1.5">
+      <div className="flex gap-1 flex-wrap">
+        {[100, 200, 300, 500].map(v => <button key={v} onClick={() => { dispatch({ type: 'SET_GOAL', goalType: 'CALORIES', goalValue: v }); setCustomVal(''); }}
+          className={`px-2.5 py-1 rounded text-xs font-bold ${goalValue === v ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400'}`}>{v}kcal</button>)}
+      </div>
+      <input type="number" value={customVal} onChange={e => { const v = parseInt(e.target.value); setCustomVal(e.target.value); if (v > 0 && v <= 5000) dispatch({ type: 'SET_GOAL', goalType: 'CALORIES', goalValue: v }); }}
+        placeholder="自定义千卡" className="w-full px-3 py-2 rounded-xl bg-slate-800 text-white text-xs outline-none placeholder:text-slate-500" />
+      <p className="text-[10px] text-slate-500">⚠️ 热量为估算值</p>
+    </div>}
+    <p className="text-[10px] text-slate-500 mt-2">目标仅本次有效，下次默认无目标</p>
+  </div>;
 }

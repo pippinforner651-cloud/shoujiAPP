@@ -9,14 +9,31 @@ export class LeafletRunMapAdapter implements RunMapAdapter {
   private trackLine: Polyline | null = null;
   private follow = true;
   private resizeTimer: number | null = null;
+  private tileErrorReported = false;
+  private fallbackAttempted = false;
 
   mount(container: HTMLElement, callbacks: RunMapCallbacks) {
     this.map = L.map(container, { zoomControl: false, attributionControl: true }).setView([22.6, 113.97], 15);
-    const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const fallbackUrl = 'https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png';
+    const tiles = L.tileLayer(tileUrl, {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     });
-    tiles.on('tileerror', () => callbacks.onError('地图瓦片加载失败，GPS仍在记录'));
+    tiles.on('tileerror', () => {
+      if (!this.tileErrorReported) {
+        this.tileErrorReported = true;
+        callbacks.onError('地图瓦片加载失败，已切换备用源');
+        if (!this.fallbackAttempted && this.map) {
+          this.fallbackAttempted = true;
+          const fallback = L.tileLayer(fallbackUrl, {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          });
+          fallback.addTo(this.map);
+        }
+      }
+    });
     tiles.addTo(this.map);
     this.map.on('dragstart zoomstart', () => callbacks.onUserInteraction());
     window.requestAnimationFrame(() => this.map?.invalidateSize(false));
