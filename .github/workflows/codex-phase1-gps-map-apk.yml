@@ -1,0 +1,78 @@
+name: E23 Phase 1.4 GPS Map APK
+
+on:
+  push:
+    branches:
+      - codex/e23-phase1-gps-map-fix
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e23-phase1-gps-map-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout current commit
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc -b
+
+      - name: Lint
+        run: npm run lint
+
+      - name: All frontend tests
+        run: npm run test:unit
+
+      - name: Vite production build
+        env:
+          VITE_COMMIT_SHA: ${{ github.sha }}
+        run: npm run build
+
+      - name: Capacitor sync
+        run: npx cap sync android
+
+      - name: Android unit tests and clean build
+        working-directory: android
+        run: ./gradlew testDebugUnitTest clean assembleDebug --no-daemon
+
+      - name: Verify signature and prepare artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          SIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          "$SIGNER" verify --verbose "$APK"
+          cp "$APK" "E23跑起来_Phase1.4_Codex_GPS_Map_Fix.apk"
+          sha256sum "E23跑起来_Phase1.4_Codex_GPS_Map_Fix.apk" > apk-sha256.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: E23跑起来_Phase1.4_Codex_GPS_Map_Fix
+          path: |
+            E23跑起来_Phase1.4_Codex_GPS_Map_Fix.apk
+            apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 14

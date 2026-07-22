@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">E23跑起来 Kimi预览版</string>
-    <string name="title_activity_main">E23跑起来 Kimi预览版</string>
+    <string name="app_name">E23跑起来 Phase1.4预览</string>
+    <string name="title_activity_main">E23跑起来 Phase1.4预览</string>
     <string name="package_name">com.e23running.app.kimi.preview</string>
     <string name="custom_url_scheme">com.e23running.app.kimi.preview</string>
 </resources>
