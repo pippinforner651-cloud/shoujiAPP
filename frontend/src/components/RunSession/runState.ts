@@ -1,7 +1,15 @@
 /**
  * 跑步状态机
+ *
+ * Phase 1.6.1B: 新增新状态 + GPS 参数
  */
-export type RunState = 'IDLE' | 'RUNNING' | 'PAUSED' | 'FINISHED';
+export type RunState = 'IDLE' | 'PREPARING' | 'READY' | 'COUNTDOWN' | 'RUNNING' | 'PAUSED' | 'FINISHED';
+
+/** GPS 精度门槛（米）：低于此值视为可以开始 */
+export const GPS_ACCURACY_READY_M = 80;
+
+/** GPS 最小有效增量距离（公里）：低于此值不累计 */
+export const GPS_MIN_DISTANCE_KM = 0.002;
 
 export interface RunSessionData {
   state: RunState;
