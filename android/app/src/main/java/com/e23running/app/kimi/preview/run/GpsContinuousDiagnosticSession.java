@@ -10,6 +10,8 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 
+import com.getcapacitor.JSObject;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
