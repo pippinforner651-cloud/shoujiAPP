@@ -33,6 +33,11 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <service
+            android:name="com.e23running.app.gps.GpsRunService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
     </application>
 
     <!-- Permissions -->
