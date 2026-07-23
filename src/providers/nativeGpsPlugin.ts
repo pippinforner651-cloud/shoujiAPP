@@ -61,10 +61,13 @@ export interface GpsRunPlugin {
   requestSingleFix(): Promise<SingleFixResponse>;
 
   /** 启动持续定位诊断 */
-  startDiagnosticTracking(options: { durationMs?: number }): Promise<{ startTimeMs: number; durationMs: number; gpsCallbackCount: number; lockScreenPointCount: number }>;
+  startDiagnosticTracking(options: { durationMs?: number; mode?: string }): Promise<DiagnosticSessionState>;
 
   /** 取消诊断追踪 */
   cancelDiagnosticTracking(): Promise<void>;
+
+  /** 获取当前持续诊断会话状态 */
+  getContinuousDiagnosticState(): Promise<DiagnosticSessionState>;
 }
 
 // ===== 类型定义 =====
@@ -194,6 +197,39 @@ export interface DiagnosticsResponse {
   firstCallbackProvider?: string;
   lastCallbackProvider?: string;
   lastRejectReason?: string;
+}
+
+/** 持续诊断会话状态 */
+export interface DiagnosticSessionState {
+  sessionId: string;
+  modeName: string;
+  started: boolean;
+  requestInvoked: boolean;
+  requestSucceeded: boolean;
+  requestTimestampMs: number;
+  listenerCreated: boolean;
+  listenerHash: number;
+  handlerThreadCreated: boolean;
+  handlerThreadAlive: boolean;
+  looperAvailable: boolean;
+  callbackCount: number;
+  gpsCallbackCount: number;
+  firstCallbackMs: number;
+  lastCallbackMs: number;
+  firstFixReceived: boolean;
+  lastLocationCallbackMs: number;
+  locationRequestSucceeded: boolean;
+  removeUpdatesCalled: boolean;
+  threadQuitCalled: boolean;
+  stopped: boolean;
+  lastError?: string;
+  lastLatitude?: number;
+  lastLongitude?: number;
+  lastAccuracy?: number;
+  lastSpeed?: number;
+  lastBearing?: number;
+  lastProvider?: string;
+  lastAltitude?: number;
 }
 
 /** 单次定位结果 */

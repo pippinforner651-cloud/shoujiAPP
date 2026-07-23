@@ -32,6 +32,10 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    /* 底部导航与页面安全区统一变量 */
+    --bottom-nav-height: 68px;
+    --bottom-safe-area: env(safe-area-inset-bottom, 0px);
+    --page-bottom-reserve: calc(var(--bottom-nav-height) + var(--bottom-safe-area) + 24px);
   }
 
   .dark {

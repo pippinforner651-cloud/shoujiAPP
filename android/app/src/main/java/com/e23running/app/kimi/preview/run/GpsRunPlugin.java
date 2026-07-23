@@ -592,20 +592,61 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
             if (manager == null || !manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) { call.reject("GPS_PROVIDER不可用"); return; }
 
             long durationMs = call.getInt("durationMs", 60000);
-            JSObject result = new JSObject();
-            result.put("startTimeMs", System.currentTimeMillis());
-            result.put("durationMs", durationMs);
-            result.put("gpsCallbackCount", 0);
-            result.put("lockScreenPointCount", 0);
-            result.put("errors", new org.json.JSONArray());
-            // 简短的持续定位会在前端记录，这里只返回初始状态
-            call.resolve(result);
-        } catch (Exception e) { call.reject("诊断追踪启动失败: " + e.getMessage()); }
+            String mode = call.getString("mode", "STANDARD_60S");
+            String sessionId = "diag-" + System.currentTimeMillis();
+
+            boolean useHandlerThread = !"MAIN_THREAD".equals(mode);
+
+            GpsContinuousDiagnosticSession.startSession(
+                    manager, sessionId, mode, durationMs, useHandlerThread);
+
+            // 等待100ms确认启动
+            try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+
+            JSObject state = GpsContinuousDiagnosticSession.getCurrentDiagnosticState();
+            call.resolve(state);
+        } catch (Exception e) {
+            Log.e(TAG, "startDiagnosticTracking failed", e);
+            call.reject("诊断追踪启动失败: " + e.getMessage());
+        }
     }
 
     @PluginMethod
     public void cancelDiagnosticTracking(PluginCall call) {
-        call.resolve();
+        try {
+            GpsContinuousDiagnosticSession session = getActiveDiagnosticSession();
+            if (session != null) {
+                session.stop();
+            }
+            JSObject result = new JSObject();
+            result.put("stopped", true);
+            call.resolve(result);
+        } catch (Exception e) {
+            call.resolve(); // 静默停止
+        }
+    }
+
+    @PluginMethod
+    public void getContinuousDiagnosticState(PluginCall call) {
+        try {
+            JSObject state = GpsContinuousDiagnosticSession.getCurrentDiagnosticState();
+            call.resolve(state);
+        } catch (Exception e) {
+            call.reject("获取诊断状态失败: " + e.getMessage());
+        }
+    }
+
+    /** 获取当前活跃诊断会话（反射方式，用于Logcat标签一致性） */
+    private GpsContinuousDiagnosticSession getActiveDiagnosticSession() {
+        try {
+            java.lang.reflect.Field f = Class.forName(
+                    "com.e23running.app.kimi.preview.run.GpsContinuousDiagnosticSession")
+                    .getDeclaredField("sInstance");
+            f.setAccessible(true);
+            return (GpsContinuousDiagnosticSession) f.get(null);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private JSObject buildSingleFixResult(android.location.Location loc, long startMs, long endMs) {

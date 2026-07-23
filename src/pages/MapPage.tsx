@@ -24,7 +24,7 @@ export default function MapPage() {
   const recent = store.records.slice(0, 8);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" style={{ paddingBottom: 'var(--page-bottom-reserve)' }}>
       {/* 顶部统计区 */}
       <div className="px-4 pt-3 pb-2 bg-gradient-to-b from-emerald-50 to-transparent">
         {/* 双地图切换：班级接力 / 我的足迹 */}

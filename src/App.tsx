@@ -22,13 +22,13 @@ export default function App() {
 
   return (
     <div className="mx-auto max-w-md h-[100dvh] flex flex-col bg-white shadow-2xl relative overflow-hidden">
-      <div className="flex-1 min-h-0 relative">
+      <div className="flex-1 min-h-0 overflow-y-auto relative">
         {tab === 'map' && <MapPage />}
         {tab === 'run' && <RunPage />}
         {tab === 'rank' && <RankPage />}
         {tab === 'me' && <ProfilePage />}
       </div>
-      <nav className="shrink-0 bg-white border-t border-slate-100 grid grid-cols-4 pb-[env(safe-area-inset-bottom)]">
+      <nav className="shrink-0 bg-white border-t border-slate-100 grid grid-cols-4 pb-[var(--bottom-safe-area)]" style={{ height: 'var(--bottom-nav-height)' }}>
         <NavBtn active={tab === 'map'} onClick={() => setTab('map')} icon="🗺️" label="中国地图" />
         <NavBtn active={tab === 'run'} onClick={() => setTab('run')} icon="🏃" label="跑步" accent />
         <NavBtn active={tab === 'rank'} onClick={() => setTab('rank')} icon="🏆" label="排行榜" />
@@ -40,9 +40,9 @@ export default function App() {
 
 function NavBtn({ active, onClick, icon, label, accent }: { active: boolean; onClick: () => void; icon: string; label: string; accent?: boolean }) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center py-2 gap-0.5">
-      <span className={`text-xl ${accent ? 'w-11 h-11 -mt-5 rounded-full bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/30 ring-4 ring-white' : ''}`}>{icon}</span>
-      <span className={`text-[11px] ${active ? 'text-orange-600 font-bold' : 'text-slate-400'}`}>{label}</span>
+    <button onClick={onClick} className="flex flex-col items-center justify-center gap-0.5 h-full">
+      <span className={`text-xl ${accent ? 'w-10 h-10 -mt-2 rounded-full bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/30 ring-4 ring-white' : ''}`}>{icon}</span>
+      <span className={`text-[11px] leading-none ${active ? 'text-orange-600 font-bold' : 'text-slate-400'}`}>{label}</span>
     </button>
   );
 }

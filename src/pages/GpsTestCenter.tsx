@@ -3,13 +3,15 @@
 // 完全与跑步页面解耦的三层诊断：
 //   测试1：定位环境检查
 //   测试2：单次原生GPS定位
-//   测试3：60秒持续原生定位
+//   测试3：持续GPS 60秒（新增主线程/HandlerThread双模式）
 // 不创建活动、不启动距离累计、不经过跑步状态机
 // ============================================================
 import { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import GpsRun from '../providers/nativeGpsPlugin';
-import type { DiagnosticsResponse, SingleFixResponse } from '../providers/nativeGpsPlugin';
+import type { DiagnosticsResponse, SingleFixResponse, DiagnosticSessionState } from '../providers/nativeGpsPlugin';
+
+type TestMode = 'STANDARD_60S' | 'MAIN_THREAD' | 'HANDLER_THREAD';
 
 export default function GpsTestCenter({ onBack }: { onBack?: () => void }) {
   const isNative = Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('GpsRun');
@@ -27,9 +29,11 @@ export default function GpsTestCenter({ onBack }: { onBack?: () => void }) {
 
   // 持续定位
   const [trackState, setTrackState] = useState<'idle' | 'running'>('idle');
+  const [trackMode, setTrackMode] = useState<TestMode>('STANDARD_60S');
   const [trackSeconds, setTrackSeconds] = useState(0);
   const [trackPoints, setTrackPoints] = useState(0);
   const [trackLog, setTrackLog] = useState<string[]>([]);
+  const [diagState, setDiagState] = useState<DiagnosticSessionState | null>(null);
 
   const runEnvCheck = async () => {
     if (!isNative) return;
@@ -94,15 +98,21 @@ SQLite写入: ${env.sqliteWriteOk}
     setTrackSeconds(0);
     setTrackPoints(0);
     setTrackLog([]);
+    setDiagState(null);
     try {
-      GpsRun.startDiagnosticTracking({ durationMs: 60000 });
+      await GpsRun.startDiagnosticTracking({ durationMs: 60000, mode: trackMode });
+      addTrackLog(`追踪启动: mode=${trackMode}`);
       // Poll diagnostics every 2s
       const pollIv = window.setInterval(async () => {
         try {
-          const d = await GpsRun.getDiagnostics();
-          if (d.gpsCallbackCount !== undefined) setTrackPoints(d.gpsCallbackCount);
-          const lastLoc = d.lastLocationCallbackMs ? new Date(d.lastLocationCallbackMs).toLocaleTimeString() : '从未';
-          addTrackLog(`回调:${d.gpsCallbackCount} acc:${d.lastAccuracy?.toFixed(1) ?? '-'}m 最近:${lastLoc}`);
+          const d = await GpsRun.getContinuousDiagnosticState();
+          setDiagState(d);
+          const count = d.gpsCallbackCount ?? d.callbackCount ?? 0;
+          setTrackPoints(count);
+          const lastLoc = d.lastCallbackMs ? new Date(d.lastCallbackMs).toLocaleTimeString() : '从未';
+          const lastAcc = d.lastAccuracy !== undefined && d.lastAccuracy > 0 ? d.lastAccuracy.toFixed(1) : '-';
+          const hAlive = d.handlerThreadAlive ?? '-';
+          addTrackLog(`回调:${count} acc:${lastAcc}m 最近:${lastLoc} threadAlive:${hAlive}`);
         } catch (_e) { /* 非原生环境忽略 */ }
       }, 2000);
       const secIv = window.setInterval(() => setTrackSeconds(s => {
@@ -110,19 +120,20 @@ SQLite写入: ${env.sqliteWriteOk}
           window.clearInterval(pollIv);
           window.clearInterval(secIv);
           GpsRun.cancelDiagnosticTracking().catch(() => {});
+          // 最后读取一次状态
+          GpsRun.getContinuousDiagnosticState().then(d => setDiagState(d)).catch(() => {});
           setTrackState('idle');
           return 60;
         }
         return s + 1;
       }), 1000);
-      // Auto-stop at 60
     } catch (e) {
       addTrackLog(`追踪启动失败: ${e}`);
       setTrackState('idle');
     }
   };
 
-  const addTrackLog = (msg: string) => setTrackLog(prev => [...prev.slice(-50), `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  const addTrackLog = (msg: string) => setTrackLog(prev => [...prev.slice(-80), `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
   if (!isNative) {
     return (<div className="min-h-full bg-slate-950 text-white p-6">
@@ -131,7 +142,7 @@ SQLite写入: ${env.sqliteWriteOk}
     </div>);
   }
 
-  return (<div className="min-h-full bg-slate-950 text-white pb-24">
+  return (<div className="min-h-full bg-slate-950 text-white" style={{ paddingBottom: 'var(--page-bottom-reserve)' }}>
     <div className="px-5 pt-6 pb-3">
       {onBack && <button onClick={onBack} className="text-sm text-slate-400 mb-2">← 返回我的</button>}
       <h1 className="text-2xl font-black">手机GPS测试中心</h1>
@@ -160,7 +171,7 @@ SQLite写入: ${env.sqliteWriteOk}
             <Row label="最近错误" value={env.lastError || '无'} alert={!!env.lastError} />
             <div className="flex flex-wrap gap-2 mt-3">
               <button onClick={copyEnv} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">{envCopyMsg || '📋 复制全部'}</button>
-                            <button onClick={async () => { try { const r = await GpsRun.exportDiagnosticLog(); navigator.clipboard.writeText(r.log); } catch (_e) { /* 忽略 */ } }} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">📤 导出日志</button>
+              <button onClick={async () => { try { const r = await GpsRun.exportDiagnosticLog(); navigator.clipboard.writeText(r.log); } catch (_e) { /* 忽略 */ } }} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">📤 导出日志</button>
               <button onClick={() => { try { GpsRun.openAppLocationSettings(); } catch (_e) { /* 忽略 */ } }} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">⚙️ 定位设置</button>
               <button onClick={() => { try { GpsRun.openSystemLocationSettings(); } catch (_e) { /* 忽略 */ } }} className="px-3 py-1.5 rounded-full bg-slate-700 text-xs font-bold">📍 系统定位</button>
             </div>
@@ -199,22 +210,63 @@ SQLite写入: ${env.sqliteWriteOk}
         )}
       </section>
 
-      {/* 测试3：60秒持续定位 */}
+      {/* 测试3：持续GPS 60秒 */}
       <section className="rounded-3xl bg-slate-900 p-5">
         <h2 className="text-lg font-bold flex items-center gap-2">⏱️ 测试3：持续GPS 60秒</h2>
-        <p className="text-xs text-slate-500 mt-1">原生LocationManager持续定位，每2秒采样一次诊断数据。</p>
+        <p className="text-xs text-slate-500 mt-1">原生LocationManager持续定位，每2秒采样诊断数据。</p>
         {trackState === 'idle' ? (
-          <button onClick={startTracking} className="mt-3 w-full py-3 rounded-full bg-orange-500 font-bold">开始60秒追踪</button>
+          <div>
+            {/* 测试模式选择 */}
+            <div className="mt-3 grid grid-cols-3 gap-1.5 rounded-2xl bg-slate-950 p-1">
+              {([['STANDARD_60S', '标准60s'], ['MAIN_THREAD', '主线程'], ['HANDLER_THREAD', 'HandlerThread']] as [TestMode, string][]).map(([mode, label]) => (
+                <button key={mode} onClick={() => setTrackMode(mode)}
+                  className={`py-2 rounded-xl text-xs font-bold ${trackMode === mode ? 'bg-orange-500 text-white' : 'text-slate-400'}`}>{label}</button>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">
+              {trackMode === 'STANDARD_60S' && 'HandlerThread Looper，标准60秒持续定位'}
+              {trackMode === 'MAIN_THREAD' && '主线程Looper，用于诊断HandlerThread是否故障'}
+              {trackMode === 'HANDLER_THREAD' && 'HandlerThread Looper，与标准模式相同但独立Session'}
+            </p>
+            <button onClick={startTracking} className="mt-3 w-full py-3 rounded-full bg-orange-500 font-bold">开始{trackMode === 'STANDARD_60S' ? '60秒' : '20秒'}追踪</button>
+          </div>
         ) : (
           <div className="mt-4">
+            {/* 进度条 */}
             <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-sm font-bold">追踪中... {trackSeconds}s / 60s</span>
+              <span className="text-sm font-bold">追踪中... {trackSeconds}s / {trackMode === 'STANDARD_60S' ? 60 : 20}s</span>
               <span className="text-xs text-slate-400">回调 {trackPoints} 次</span>
             </div>
             <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-              <div className="h-full bg-orange-400 transition-all" style={{ width: `${(trackSeconds / 60) * 100}%` }} />
+              <div className="h-full bg-orange-400 transition-all" style={{ width: `${(trackSeconds / (trackMode === 'STANDARD_60S' ? 60 : 20)) * 100}%` }} />
             </div>
+
+            {/* 诊断会话详细状态 */}
+            {diagState && (
+              <div className="mt-3 rounded-xl bg-slate-950 p-3 space-y-1 text-[10px] font-mono">
+                <DiagRow label="sessionId" value={diagState.sessionId} />
+                <DiagRow label="mode" value={diagState.modeName} />
+                <DiagRow label="requestInvoked" value={String(diagState.requestInvoked)} alert={!diagState.requestInvoked} />
+                <DiagRow label="requestSucceeded" value={String(diagState.requestSucceeded)} alert={!diagState.requestSucceeded} />
+                <DiagRow label="listenerCreated" value={String(diagState.listenerCreated)} alert={!diagState.listenerCreated} />
+                <DiagRow label="listenerHash" value={String(diagState.listenerHash)} />
+                <DiagRow label="handlerThreadAlive" value={String(diagState.handlerThreadAlive ?? '-')} alert={diagState.handlerThreadAlive === false} />
+                <DiagRow label="looperAvailable" value={String(diagState.looperAvailable ?? '-')} alert={diagState.looperAvailable === false} />
+                <DiagRow label="callbackCount" value={String(diagState.callbackCount)} alert={diagState.callbackCount === 0} />
+                <DiagRow label="firstFixReceived" value={String(diagState.firstFixReceived)} alert={!diagState.firstFixReceived} />
+                <DiagRow label="firstCallbackAt" value={diagState.firstCallbackMs ? new Date(diagState.firstCallbackMs).toLocaleTimeString() : '-'} />
+                <DiagRow label="lastCallbackAt" value={diagState.lastCallbackMs ? new Date(diagState.lastCallbackMs).toLocaleTimeString() : '从未'} alert={diagState.lastCallbackMs === 0} />
+                {diagState.lastAccuracy !== undefined && <DiagRow label="lastAccuracy" value={diagState.lastAccuracy > 0 ? diagState.lastAccuracy.toFixed(1) + 'm' : '-'} />}
+                {diagState.lastProvider && <DiagRow label="lastProvider" value={diagState.lastProvider} />}
+                {diagState.lastLatitude !== undefined && <DiagRow label="lastLat/Lng" value={`${diagState.lastLatitude.toFixed(6)}, ${diagState.lastLongitude?.toFixed(6)}`} />}
+                <DiagRow label="removeUpdatesCalled" value={String(diagState.removeUpdatesCalled)} />
+                <DiagRow label="threadQuitCalled" value={String(diagState.threadQuitCalled)} />
+                {diagState.lastError && <DiagRow label="lastError" value={diagState.lastError} alert />}
+              </div>
+            )}
+
+            {/* 日志 */}
             <div className="mt-3 max-h-40 overflow-y-auto bg-slate-950 rounded-xl p-2 text-[10px] font-mono text-slate-400 space-y-0.5">
               {trackLog.map((l, i) => <div key={i}>{l}</div>)}
               {trackLog.length === 0 && <div className="text-slate-600">等待GPS回调...</div>}
@@ -235,6 +287,9 @@ SQLite写入: ${env.sqliteWriteOk}
             <li>单次成功+持续无回调 → 检查Service/线程/厂商限制</li>
             <li>持续回调正常+距离0 → 检查evaluator/SQLite/React同步</li>
             <li>原生距离{'>'}0+UI=0 → 检查事件名/监听/状态同步</li>
+            <li><b>主线程有回调+HandlerThread无回调</b> → HandlerThread实现故障</li>
+            <li><b>两者都有回调</b> → 原诊断状态读取或React订阅故障</li>
+            <li><b>两者都无回调</b> → listener注册或生命周期故障</li>
           </ul>
         </div>
       </section>
@@ -244,4 +299,11 @@ SQLite写入: ${env.sqliteWriteOk}
 
 function Row({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) {
   return <div className="flex justify-between"><span className="text-slate-500">{label}</span><span className={`font-mono ${alert ? 'text-red-400 font-bold' : 'text-slate-200'}`}>{value}</span></div>;
+}
+
+function DiagRow({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) {
+  return <div className={`flex justify-between ${alert ? 'bg-red-950/30 -mx-2 px-2 py-0.5 rounded' : ''}`}>
+    <span className="text-slate-500">{label}</span>
+    <span className={`${alert ? 'text-amber-300 font-bold' : 'text-slate-300'}`}>{value}</span>
+  </div>;
 }

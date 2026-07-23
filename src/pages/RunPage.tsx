@@ -86,7 +86,7 @@ export default function RunPage() {
   const canStartOutdoor = Boolean(diagnostics?.serviceRunning && diagnostics.locationRequestSucceeded && gpsCallbacks > 0);
   const hasFirstFix = Boolean(diagnostics?.firstFixReceived);
 
-  return <div className="min-h-full bg-slate-950 text-white pb-24">
+  return <div className="min-h-full bg-slate-950 text-white" style={{ paddingBottom: 'var(--page-bottom-reserve)' }}>
     <header className="px-5 pt-5 pb-3">
       <div className="text-xs tracking-[.22em] text-orange-400">E23 V2预览测试版</div>
       <h1 className="text-2xl font-black mt-1">跑起来</h1>

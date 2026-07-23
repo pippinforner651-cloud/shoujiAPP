@@ -7,7 +7,7 @@ export default function RankPage() {
   const me = store.user;
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50">
+    <div className="h-full overflow-y-auto bg-slate-50" style={{ paddingBottom: 'var(--page-bottom-reserve)' }}>
       <div className="px-4 pt-4 pb-3 bg-white sticky top-0 z-10 border-b border-slate-100">
         <div className="text-lg font-black text-slate-800">E23班排行榜</div>
         <div className="text-xs text-slate-500 mt-0.5">年度目标人均 {CONFIG.ANNUAL_GOAL_KM} km · 全班接力 27,171 km</div>
