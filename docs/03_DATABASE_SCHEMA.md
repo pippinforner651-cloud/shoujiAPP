@@ -29,7 +29,7 @@ CREATE TABLE public.classes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,           -- 'E23'
   display_name TEXT,            -- '北大汇丰 EMBA E23 班'
-  total_route_km NUMERIC DEFAULT 21423,
+  total_route_km NUMERIC NOT NULL DEFAULT 27000,  -- 约 27,000 km（E23 V2 目标，2026-07-25 冻结）
   created_at TIMESTAMPTZ DEFAULT now()
 );
 ```

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.classes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   display_name TEXT,
-  total_route_km NUMERIC NOT NULL DEFAULT 21423,
+  total_route_km NUMERIC NOT NULL DEFAULT 27000,  -- 约 27,000 km（E23 V2 目标）
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -369,7 +369,7 @@ CREATE POLICY "users manage own queue"
 -- 05 SEED DATA
 -- ============================================================
 INSERT INTO public.classes (name, display_name, total_route_km)
-VALUES ('E23', '北大汇丰 EMBA E23 班', 21423)
+VALUES ('E23', '北大汇丰 EMBA E23 班', 27000)  -- 约 27,000 km（E23 V2 目标）
 ON CONFLICT (name) DO UPDATE
 SET display_name = EXCLUDED.display_name,
     total_route_km = EXCLUDED.total_route_km;

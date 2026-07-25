@@ -91,7 +91,7 @@ BEGIN
   INSERT INTO public.route_progress (class_id, current_city_index, completed_km, progress_pct, updated_at)
   SELECT v_class_id, 0,
     ROUND(COALESCE((SELECT SUM(distance_m) FROM public.run_activities WHERE class_id = v_class_id AND status = 'valid'), 0)::NUMERIC / 10000.0, 4),
-    ROUND(COALESCE((SELECT SUM(distance_m) FROM public.run_activities WHERE class_id = v_class_id AND status = 'valid'), 0)::NUMERIC / 10000.0 / 21423.0 * 100, 2),
+    ROUND(COALESCE((SELECT SUM(distance_m) FROM public.run_activities WHERE class_id = v_class_id AND status = 'valid'), 0)::NUMERIC / 10000.0 / 27000.0 * 100, 2),  -- 约 27,000 km
     NOW()
   ON CONFLICT (class_id) DO UPDATE SET
     completed_km = EXCLUDED.completed_km,
