@@ -179,7 +179,19 @@ ALTER TABLE public.route_unlocks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sync_queue ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
--- 04 POLICIES
+-- 04 SECURITY DEFINER FUNCTIONS (bypass RLS for class checks)
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.user_class_id()
+RETURNS UUID
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  SELECT class_id FROM public.profiles WHERE id = auth.uid();
+$$;
+
+-- ============================================================
+-- 05 POLICIES (all class checks use user_class_id() to avoid recursion)
 -- ============================================================
 
 -- classes
@@ -214,17 +226,19 @@ DROP POLICY IF EXISTS "users can update own profile" ON public.profiles;
 CREATE POLICY "users can update own profile"
   ON public.profiles FOR UPDATE
   TO authenticated
-  USING (auth.uid() = id);
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
+
+-- class_id / role / status can only be modified by admins or system
+-- Note: direct UPDATE of these fields by regular users will be rejected
+-- by the BEFORE UPDATE trigger defined below
 
 DROP POLICY IF EXISTS "classmates can read basic info" ON public.profiles;
 CREATE POLICY "classmates can read basic info"
   ON public.profiles FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.class_members cm
-      WHERE cm.user_id = auth.uid() AND cm.class_id = public.profiles.class_id
-    )
+    public.user_class_id() = class_id
   );
 
 -- class_members
@@ -233,7 +247,7 @@ CREATE POLICY "members can read their class roster"
   ON public.class_members FOR SELECT
   TO authenticated
   USING (
-    class_id IN (SELECT cm2.class_id FROM public.class_members cm2 WHERE cm2.user_id = auth.uid())
+    class_id = public.user_class_id()
   );
 
 DROP POLICY IF EXISTS "users cannot self-insert membership" ON public.class_members;
@@ -264,10 +278,7 @@ CREATE POLICY "classmates can read valid activities"
   TO authenticated
   USING (
     status = 'valid'
-    AND EXISTS (
-      SELECT 1 FROM public.class_members cm
-      WHERE cm.user_id = auth.uid() AND cm.class_id = public.run_activities.class_id
-    )
+    AND class_id = public.user_class_id()
   );
 
 -- run_track_points
@@ -304,9 +315,7 @@ CREATE POLICY "classmates can read user stats"
     EXISTS (
       SELECT 1 FROM public.class_members cm
       WHERE cm.user_id = auth.uid()
-      AND cm.class_id IN (
-        SELECT cm2.class_id FROM public.class_members cm2 WHERE cm2.user_id = public.user_stats.user_id
-      )
+      AND cm.class_id = (SELECT class_id FROM public.profiles WHERE id = public.user_stats.user_id)
     )
   );
 
@@ -316,10 +325,7 @@ CREATE POLICY "members can read class stats"
   ON public.class_stats FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.class_members cm
-      WHERE cm.user_id = auth.uid() AND cm.class_id = public.class_stats.class_id
-    )
+    class_id = public.user_class_id()
   );
 
 DROP POLICY IF EXISTS "only triggers can write class stats" ON public.class_stats;
@@ -334,10 +340,7 @@ CREATE POLICY "members can read route progress"
   ON public.route_progress FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.class_members cm
-      WHERE cm.user_id = auth.uid() AND cm.class_id = public.route_progress.class_id
-    )
+    class_id = public.user_class_id()
   );
 
 DROP POLICY IF EXISTS "only triggers can write route progress" ON public.route_progress;
@@ -352,10 +355,7 @@ CREATE POLICY "members can read route unlocks"
   ON public.route_unlocks FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.class_members cm
-      WHERE cm.user_id = auth.uid() AND cm.class_id = public.route_unlocks.class_id
-    )
+    class_id = public.user_class_id()
   );
 
 -- sync_queue
