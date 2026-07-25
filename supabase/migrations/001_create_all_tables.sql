@@ -1,6 +1,6 @@
 -- E23跑起来 · Phase 2.1 数据库迁移
--- 创建 11 张云端业务表
--- 从第一版即启用 Row Level Security
+-- 创建 11 张云端业务表，从第一版即启用 Row Level Security
+-- 可重复执行（DROP POLICY IF EXISTS + CREATE TABLE IF NOT EXISTS）
 
 -- ============================================================
 -- 1. profiles（扩展 Supabase auth.users）
@@ -20,22 +20,28 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- 本人可读/写自己的 profile
+DROP POLICY IF EXISTS "users can read own profile" ON public.profiles;
 CREATE POLICY "users can read own profile"
   ON public.profiles FOR SELECT
+  TO authenticated
   USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "users can insert own profile" ON public.profiles;
 CREATE POLICY "users can insert own profile"
   ON public.profiles FOR INSERT
+  TO authenticated
   WITH CHECK (auth.uid() = id);
 
+DROP POLICY IF EXISTS "users can update own profile" ON public.profiles;
 CREATE POLICY "users can update own profile"
   ON public.profiles FOR UPDATE
+  TO authenticated
   USING (auth.uid() = id);
 
--- 班级成员可读同班公开资料
+DROP POLICY IF EXISTS "classmates can read basic info" ON public.profiles;
 CREATE POLICY "classmates can read basic info"
   ON public.profiles FOR SELECT
+  TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.class_members cm
@@ -57,14 +63,16 @@ CREATE TABLE IF NOT EXISTS public.classes (
 
 ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
 
--- 所有认证用户可读班级信息
+DROP POLICY IF EXISTS "authenticated users can read classes" ON public.classes;
 CREATE POLICY "authenticated users can read classes"
   ON public.classes FOR SELECT
-  USING (auth.role() = 'authenticated');
+  TO authenticated
+  USING (true);
 
--- 仅管理员可写
+DROP POLICY IF EXISTS "admins can manage classes" ON public.classes;
 CREATE POLICY "admins can manage classes"
   ON public.classes FOR ALL
+  TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
@@ -86,22 +94,26 @@ CREATE TABLE IF NOT EXISTS public.class_members (
 
 ALTER TABLE public.class_members ENABLE ROW LEVEL SECURITY;
 
--- 用户可读自己所属班级的成员
+DROP POLICY IF EXISTS "members can read their class roster" ON public.class_members;
 CREATE POLICY "members can read their class roster"
   ON public.class_members FOR SELECT
+  TO authenticated
   USING (
     class_id IN (
       SELECT cm2.class_id FROM public.class_members cm2 WHERE cm2.user_id = auth.uid()
     )
   );
 
--- 用户不可自行添加（需管理员或邀请码机制）
+DROP POLICY IF EXISTS "users cannot self-insert membership" ON public.class_members;
 CREATE POLICY "users cannot self-insert membership"
   ON public.class_members FOR INSERT
+  TO authenticated
   WITH CHECK (false);
 
+DROP POLICY IF EXISTS "admins can manage membership" ON public.class_members;
 CREATE POLICY "admins can manage membership"
   ON public.class_members FOR ALL
+  TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
@@ -131,22 +143,24 @@ CREATE TABLE IF NOT EXISTS public.run_activities (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_run_activities_user_id ON public.run_activities(user_id);
-CREATE INDEX idx_run_activities_class_id ON public.run_activities(class_id);
-CREATE INDEX idx_run_activities_client_id ON public.run_activities(client_id);
-CREATE INDEX idx_run_activities_created_at ON public.run_activities(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_run_activities_user_id ON public.run_activities(user_id);
+CREATE INDEX IF NOT EXISTS idx_run_activities_class_id ON public.run_activities(class_id);
+CREATE INDEX IF NOT EXISTS idx_run_activities_client_id ON public.run_activities(client_id);
+CREATE INDEX IF NOT EXISTS idx_run_activities_created_at ON public.run_activities(created_at DESC);
 
 ALTER TABLE public.run_activities ENABLE ROW LEVEL SECURITY;
 
--- 用户只能 CRUD 自己的活动
+DROP POLICY IF EXISTS "users manage own activities" ON public.run_activities;
 CREATE POLICY "users manage own activities"
   ON public.run_activities FOR ALL
+  TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
--- 同班成员可读取已完成的公开活动
+DROP POLICY IF EXISTS "classmates can read valid activities" ON public.run_activities;
 CREATE POLICY "classmates can read valid activities"
   ON public.run_activities FOR SELECT
+  TO authenticated
   USING (
     status = 'valid'
     AND EXISTS (
@@ -170,14 +184,15 @@ CREATE TABLE IF NOT EXISTS public.run_track_points (
   UNIQUE(activity_id, seq)
 );
 
-CREATE INDEX idx_track_points_activity ON public.run_track_points(activity_id);
-CREATE INDEX idx_track_points_activity_seq ON public.run_track_points(activity_id, seq);
+CREATE INDEX IF NOT EXISTS idx_track_points_activity ON public.run_track_points(activity_id);
+CREATE INDEX IF NOT EXISTS idx_track_points_activity_seq ON public.run_track_points(activity_id, seq);
 
 ALTER TABLE public.run_track_points ENABLE ROW LEVEL SECURITY;
 
--- 仅本人可读写自己的轨迹
+DROP POLICY IF EXISTS "users manage own track points" ON public.run_track_points;
 CREATE POLICY "users manage own track points"
   ON public.run_track_points FOR ALL
+  TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.run_activities ra
@@ -200,8 +215,10 @@ CREATE TABLE IF NOT EXISTS public.daily_stats (
 
 ALTER TABLE public.daily_stats ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "users manage own daily stats" ON public.daily_stats;
 CREATE POLICY "users manage own daily stats"
   ON public.daily_stats FOR ALL
+  TO authenticated
   USING (user_id = auth.uid());
 
 -- ============================================================
@@ -219,14 +236,16 @@ CREATE TABLE IF NOT EXISTS public.user_stats (
 
 ALTER TABLE public.user_stats ENABLE ROW LEVEL SECURITY;
 
--- 本人可读写
+DROP POLICY IF EXISTS "users manage own stats" ON public.user_stats;
 CREATE POLICY "users manage own stats"
   ON public.user_stats FOR ALL
+  TO authenticated
   USING (user_id = auth.uid());
 
--- 同班可读（排行榜用）
+DROP POLICY IF EXISTS "classmates can read user stats" ON public.user_stats;
 CREATE POLICY "classmates can read user stats"
   ON public.user_stats FOR SELECT
+  TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.class_members cm
@@ -251,9 +270,10 @@ CREATE TABLE IF NOT EXISTS public.class_stats (
 
 ALTER TABLE public.class_stats ENABLE ROW LEVEL SECURITY;
 
--- 成员可读
+DROP POLICY IF EXISTS "members can read class stats" ON public.class_stats;
 CREATE POLICY "members can read class stats"
   ON public.class_stats FOR SELECT
+  TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.class_members cm
@@ -262,9 +282,10 @@ CREATE POLICY "members can read class stats"
     )
   );
 
--- 仅服务端/触发器可写
+DROP POLICY IF EXISTS "only triggers can write class stats" ON public.class_stats;
 CREATE POLICY "only triggers can write class stats"
   ON public.class_stats FOR ALL
+  TO authenticated
   USING (false);
 
 -- ============================================================
@@ -283,8 +304,10 @@ CREATE TABLE IF NOT EXISTS public.route_progress (
 
 ALTER TABLE public.route_progress ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "members can read route progress" ON public.route_progress;
 CREATE POLICY "members can read route progress"
   ON public.route_progress FOR SELECT
+  TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.class_members cm
@@ -293,8 +316,10 @@ CREATE POLICY "members can read route progress"
     )
   );
 
+DROP POLICY IF EXISTS "only triggers can write route progress" ON public.route_progress;
 CREATE POLICY "only triggers can write route progress"
   ON public.route_progress FOR ALL
+  TO authenticated
   USING (false);
 
 -- ============================================================
@@ -312,8 +337,10 @@ CREATE TABLE IF NOT EXISTS public.route_unlocks (
 
 ALTER TABLE public.route_unlocks ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "members can read route unlocks" ON public.route_unlocks;
 CREATE POLICY "members can read route unlocks"
   ON public.route_unlocks FOR SELECT
+  TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.class_members cm
@@ -336,13 +363,15 @@ CREATE TABLE IF NOT EXISTS public.sync_queue (
   processed_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_sync_queue_status ON public.sync_queue(status);
-CREATE INDEX idx_sync_queue_user ON public.sync_queue(user_id);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON public.sync_queue(status);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_user ON public.sync_queue(user_id);
 
 ALTER TABLE public.sync_queue ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "users manage own queue" ON public.sync_queue;
 CREATE POLICY "users manage own queue"
   ON public.sync_queue FOR ALL
+  TO authenticated
   USING (user_id = auth.uid());
 
 -- ============================================================
