@@ -1,0 +1,121 @@
+name: E23 Phase 1.5 GPS Live Fix APK
+
+on:
+  push:
+    branches:
+      - codex/e23-phase1-gps-map-fix
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: '必须构建的 Git ref（内测发布请填写 tag，例如 e23-v2-internal-v1）'
+        required: true
+        type: string
+        default: e23-v2-internal-v1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e23-phase1-gps-map-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v4
+        with:
+          # 手动运行严格使用输入 ref；分支 push 使用触发该运行的 ref，绝不默认 checkout main。
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Verify checked out ref
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET_REF='${{ inputs.ref || github.ref }}'
+          ACTUAL_SHA=$(git rev-parse HEAD)
+          echo "target_ref=$TARGET_REF" >> "$GITHUB_OUTPUT"
+          echo "sha=$ACTUAL_SHA" >> "$GITHUB_OUTPUT"
+          echo "Checked out ref: $TARGET_REF"
+          echo "HEAD SHA: $ACTUAL_SHA"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            EXPECTED_SHA=$(git rev-parse "${TARGET_REF}^{}")
+            test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+            test "$(git describe --exact-match --tags HEAD)" = "$TARGET_REF"
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc -b
+
+      - name: Lint
+        run: npm run lint
+
+      - name: All frontend tests
+        run: npm run test:unit
+
+      - name: Vite production build
+        env:
+          VITE_COMMIT_SHA: ${{ steps.target.outputs.sha }}
+        run: npm run build
+
+      - name: Capacitor sync
+        run: npx cap sync android
+
+      - name: Android unit tests
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Android clean build
+        working-directory: android
+        run: ./gradlew clean assembleDebug --no-daemon
+
+      - name: Verify signature and prepare artifact
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          SIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          "$SIGNER" verify --verbose "$APK"
+          LABEL='${{ inputs.ref || github.ref_name }}'
+          SAFE_LABEL=$(printf '%s' "$LABEL" | tr -cd 'A-Za-z0-9._-')
+          test -n "$SAFE_LABEL"
+          APK_NAME="E23跑起来_${SAFE_LABEL}.apk"
+          SHA_NAME="apk-sha256.txt"
+          cp "$APK" "$APK_NAME"
+          sha256sum "$APK_NAME" > "$SHA_NAME"
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          echo "sha_name=$SHA_NAME" >> "$GITHUB_OUTPUT"
+          echo "apk_sha256=$(cut -d' ' -f1 "$SHA_NAME")" >> "$GITHUB_OUTPUT"
+          echo "APK name: $APK_NAME"
+          echo "APK size: $(wc -c < "$APK_NAME")"
+          echo "APK SHA256: $(cut -d' ' -f1 "$SHA_NAME")"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: E23跑起来_${{ inputs.ref || github.ref_name }}
+          path: |
+            ${{ steps.package.outputs.apk_name }}
+            ${{ steps.package.outputs.sha_name }}
+          if-no-files-found: error
+          retention-days: 14
