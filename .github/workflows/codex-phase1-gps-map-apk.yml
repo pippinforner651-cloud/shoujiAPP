@@ -100,7 +100,7 @@ jobs:
           SAFE_LABEL=$(printf '%s' "$LABEL" | tr -cd 'A-Za-z0-9._-')
           test -n "$SAFE_LABEL"
           APK_NAME="E23跑起来_${SAFE_LABEL}.apk"
-          SHA_NAME="${APK_NAME}.sha256.txt"
+          SHA_NAME="apk-sha256.txt"
           cp "$APK" "$APK_NAME"
           sha256sum "$APK_NAME" > "$SHA_NAME"
           echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
