@@ -5,6 +5,9 @@ import type {
   ActivityPayload, AuthResponse, ClassProgress, CreateActivityResponse,
   IntegrationCatalogEntry, LeaderboardRow, MyStats, ProviderStatus, ProviderSyncResult, SyncResponse,
 } from './types';
+import { store } from '../lib/store';
+
+function getStore() { return store; }
 
 const OUTBOX_KEY = 'e23_outbox_v1';
 
@@ -12,6 +15,7 @@ export interface OutboxItem extends ActivityPayload {
   queuedAt: string;
   attempts: number;
   lastError?: string;
+  userId?: string;       // 离线上传时记录归属用户，避免换账号后串数据
 }
 
 export function getOutbox(): OutboxItem[] {
@@ -28,7 +32,10 @@ function saveOutbox(items: OutboxItem[]) {
 export function enqueue(payload: ActivityPayload) {
   const items = getOutbox();
   if (items.some((i) => i.clientId === payload.clientId)) return; // 去重
-  items.push({ ...payload, queuedAt: new Date().toISOString(), attempts: 0 });
+  // 获取当前用户标识
+  const store = getStore();
+  const uid = store?.user?.serverId || store?.user?.phone || '';
+  items.push({ ...payload, queuedAt: new Date().toISOString(), attempts: 0, userId: uid });
   saveOutbox(items);
 }
 
@@ -126,12 +133,16 @@ export async function uploadActivity(payload: ActivityPayload): Promise<'ok' | '
 
 /** 冲刷离线队列：批量同步，逐条按幂等处理 */
 export async function flushOutbox(): Promise<{ sent: number; remain: number }> {
-  const items = getOutbox();
-  if (!items.length || !isApiEnabled()) return { sent: 0, remain: items.length };
+  const allItems = getOutbox();
+  if (!allItems.length || !isApiEnabled()) return { sent: 0, remain: allItems.length };
+  // 只发送属于当前用户的数据
+  const uid = store?.user?.serverId || store?.user?.phone || '';
+  const items = uid ? allItems.filter((i) => !i.userId || i.userId === uid) : [];
+  if (!items.length) { saveOutbox(allItems.filter((i) => i.userId && i.userId !== uid)); return { sent: 0, remain: 0 }; }
   try {
-    const res = await ActivityAPI.sync(items.map(({ queuedAt: _q, attempts: _a, lastError: _e, ...p }) => p));
+    const res = await ActivityAPI.sync(items.map(({ queuedAt: _q, attempts: _a, lastError: _e, userId: _uid, ...p }) => p));
     const failedIds = new Set(res.results.filter((r) => !r.ok).map((r) => r.clientId));
-    const remain = items.filter((i) => failedIds.has(i.clientId));
+    const remain = allItems.filter((i) => failedIds.has(i.clientId));
     saveOutbox(remain);
     return { sent: res.synced, remain: remain.length };
   } catch {

@@ -28,6 +28,7 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(me?.nickname || '');
   const [packMsg, setPackMsg] = useState('');
+  const [cloudSyncMsg, setCloudSyncMsg] = useState('');
   const [showRouteReport, setShowRouteReport] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
@@ -167,6 +168,15 @@ export default function ProfilePage() {
             </div>
           )}
           {flushMsg && <div className="text-[10px] text-slate-400 mt-1 text-right">{flushMsg}</div>}
+          {/* Supabase云端同步按钮 */}
+          {me?.serverId && (
+            <div className="mt-2 flex items-center justify-between">
+              <div className="text-xs text-slate-500">云端Supabase</div>
+              <button onClick={async () => { setCloudSyncMsg('同步中...'); const ok = await store.loadCloudRecords(); setCloudSyncMsg(ok ? '✅ 已从云端加载' : '❌ 同步失败'); setTimeout(() => setCloudSyncMsg(''), 3000); }}
+                className="text-xs px-3 py-1.5 rounded-full bg-emerald-500 text-white font-bold">从云端加载</button>
+            </div>
+          )}
+          {cloudSyncMsg && <div className="text-[10px] text-slate-400 mt-1 text-right">{cloudSyncMsg}</div>}
         </Section>
       )}
 

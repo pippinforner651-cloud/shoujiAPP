@@ -197,6 +197,20 @@ public class GpsRunPlugin extends Plugin implements GpsRunService.RunStateListen
         }
     }
 
+    // ===== 用户隔离 =====
+
+    @PluginMethod
+    public void setCurrentUser(PluginCall call) {
+        String userId = call.getString("userId", "");
+        RunDatabaseHelper.setCurrentUserId(userId);
+        // 首次登录时迁移旧数据
+        if (!userId.isEmpty() && RunDatabaseHelper.getInstance(getContext()).hasOrphanActivities()) {
+            int migrated = RunDatabaseHelper.getInstance(getContext()).migrateOrphanActivities();
+            android.util.Log.i("E23GpsRunPlugin", "Migrated " + migrated + " orphan activities");
+        }
+        call.resolve();
+    }
+
     @PluginMethod
     public void openAppLocationSettings(PluginCall call) {
         try {

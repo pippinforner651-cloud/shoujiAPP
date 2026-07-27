@@ -46,6 +46,11 @@ class Store {
       const r = localStorage.getItem(RECORDS_KEY);
       if (r) this.records = JSON.parse(r);
       this.customPack = localStorage.getItem(PACK_KEY);
+      // APP启动时如果已登录，通知原生层
+      if (this.user) {
+        // 延迟执行确保APP完全启动
+        setTimeout(() => this.syncNativeUserId(), 500);
+      }
     } catch { /* 本地数据损坏时从空开始，不清除原数据 */ }
   }
 
@@ -55,10 +60,20 @@ class Store {
   }
   private emit() { this.version++; this.listeners.forEach((f) => f()); }
 
+  /** 通知原生层当前登录用户ID（用于SQLite数据隔离） */
+  private async syncNativeUserId() {
+    try {
+      const { default: GpsRun } = await import('../providers/nativeGpsPlugin');
+      const userId = this.user?.serverId || this.user?.phone || '';
+      await GpsRun.setCurrentUser({ userId });
+    } catch { /* 非原生环境忽略 */ }
+  }
+
   login(nickname: string, phone?: string) {
     const rnd = Math.floor(Math.random() * AVATAR_COLORS.length);
     this.user = { nickname, wxName: nickname, color: AVATAR_COLORS[rnd], phone, joinedAt: Date.now(), authMode: 'test' };
     localStorage.setItem(USER_KEY, JSON.stringify(this.user));
+    this.syncNativeUserId();
     this.emit();
   }
 
@@ -78,6 +93,7 @@ class Store {
       serverRole: u.role,
     };
     localStorage.setItem(USER_KEY, JSON.stringify(this.user));
+    this.syncNativeUserId();
     this.emit();
   }
 
@@ -99,6 +115,8 @@ class Store {
   logout() {
     this.user = null;
     localStorage.removeItem(USER_KEY);
+    // 通知原生层清除用户ID，后续SQLite操作不可读取任何数据
+    this.syncNativeUserId();
     // 后端 token 一并清除（动态 import 避免循环依赖）
     import('../api/client').then((m) => m.setToken(null)).catch(() => {});
     this.emit();
@@ -122,6 +140,61 @@ class Store {
     this.records.unshift(rec);
     localStorage.setItem(RECORDS_KEY, JSON.stringify(this.records.slice(0, 500)));
     this.emit();
+    // 同步到Supabase（异步，不阻塞）
+    this.syncRecordToCloud(rec);
+  }
+
+  /** 将新记录异步写入Supabase */
+  private async syncRecordToCloud(rec: RunRecord) {
+    try {
+      const { isSupabaseEnabled } = await import('../lib/supabase');
+      if (!isSupabaseEnabled() || !this.user?.serverId) return;
+      const { CloudRunRepo } = await import('../repositories/CloudRepository');
+      const result = await CloudRunRepo.upsertActivity({
+        client_id: rec.id,
+        user_id: this.user.serverId,
+        distance_m: Math.round(rec.km * 1000),
+        duration_sec: rec.durationSec,
+        avg_pace_sec: rec.avgPaceSec,
+        source: rec.source === 'joyrun' ? 'joyrun' : rec.source === 'gps' ? 'gps' : 'manual',
+        status: 'valid',
+        started_at: rec.startedAt ? new Date(rec.startedAt).toISOString() : new Date(rec.ts - rec.durationSec * 1000).toISOString(),
+        ended_at: new Date(rec.ts).toISOString(),
+      });
+      if (result.ok) {
+        rec.syncState = 'ok';
+        localStorage.setItem(RECORDS_KEY, JSON.stringify(this.records.slice(0, 500)));
+        this.emit();
+      }
+    } catch { /* 离线时静默失败，下次启动或手动刷新时重试 */ }
+  }
+
+  /** 从Supabase加载当前用户的活动列表 */
+  async loadCloudRecords(): Promise<boolean> {
+    try {
+      const { isSupabaseEnabled } = await import('../lib/supabase');
+      if (!isSupabaseEnabled() || !this.user?.serverId) return false;
+      const { CloudRunRepo } = await import('../repositories/CloudRepository');
+      const result = await CloudRunRepo.listByUser(this.user.serverId);
+      if (!result.ok || !result.data) return false;
+      const records: RunRecord[] = (result.data as Array<Record<string, unknown>>).map((a) => ({
+        id: a.client_id as string,
+        ts: new Date((a.ended_at || a.created_at) as string).getTime(),
+        km: ((a.distance_m as number) || 0) / 1000,
+        durationSec: (a.duration_sec as number) || 0,
+        avgPaceSec: (a.avg_pace_sec as number) || 0,
+        source: (a.source as RunRecord['source']) || 'manual',
+        startedAt: a.started_at ? new Date(a.started_at as string).getTime() : undefined,
+        syncState: 'ok',
+      }));
+      // 合并：云端记录为主，本地未同步记录补充
+      const cloudIds = new Set(records.map((r) => r.id));
+      const localOnly = this.records.filter((r) => !cloudIds.has(r.id));
+      this.records = [...records, ...localOnly];
+      localStorage.setItem(RECORDS_KEY, JSON.stringify(this.records.slice(0, 500)));
+      this.emit();
+      return true;
+    } catch { return false; }
   }
 
   setCustomPack(json: string | null) {

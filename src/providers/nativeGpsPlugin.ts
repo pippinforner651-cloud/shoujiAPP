@@ -50,7 +50,8 @@ export interface GpsRunPlugin {
   openAppLocationSettings(): Promise<void>;
   openSystemLocationSettings(): Promise<void>;
 
-  /** 导出诊断日志文本 */
+  /** 设置当前登录用户ID（用于本地SQLite数据隔离） */
+  setCurrentUser(options: { userId: string }): Promise<void>;
   exportDiagnosticLog(): Promise<{ log: string }>;
 
   addListener(eventName: 'locationUpdate', listener: (event: TrackPointResponse) => void): Promise<PluginListenerHandle>;

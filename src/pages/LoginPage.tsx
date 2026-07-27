@@ -1,12 +1,47 @@
 import { useState } from 'react';
 import { store } from '../lib/store';
 import { CONFIG } from '../config';
+import { canUseCloudAuth, signIn, signUp, getCurrentProfile } from '../services/auth';
+import { isSupabaseEnabled } from '../lib/supabase';
 
 export default function LoginPage() {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [nick, setNick] = useState('');
   const [err, setErr] = useState('');
+  const [cloudMode, setCloudMode] = useState(false);
+  const [sbEmail, setSbEmail] = useState('');
+  const [sbPw, setSbPw] = useState('');
+  const [sbNick, setSbNick] = useState('');
+  const [isRegister, setIsRegister] = useState(false);
+  const [sbLoading, setSbLoading] = useState(false);
+
+  const testLogin = () => {
+    if (!/^1\d{10}$/.test(phone)) { setErr('请输入11位测试手机号'); return; }
+    if (code !== CONFIG.TEST_SMS_CODE) { setErr(`测试验证码为 ${CONFIG.TEST_SMS_CODE}`); return; }
+    store.login(nick.trim() || `E23同学${phone.slice(-4)}`, phone);
+  };
+
+  const handleCloudAuth = async () => {
+    setErr('');
+    if (!sbEmail || !sbPw) { setErr('请输入邮箱和密码'); return; }
+    setSbLoading(true);
+    try {
+      if (isRegister) {
+        if (!sbNick.trim()) { setErr('请输入昵称'); setSbLoading(false); return; }
+        const r = await signUp(sbEmail, sbPw, sbNick.trim());
+        if (!r.ok) { setErr(r.error); setSbLoading(false); return; }
+        // SignUp may auto-confirm or require email confirmation
+        store.loginBackend({ id: r.userId, nickname: sbNick.trim(), avatarUrl: null, phone: sbEmail, role: 'member', status: 'pending' });
+      } else {
+        const r = await signIn(sbEmail, sbPw);
+        if (!r.ok) { setErr(r.error); setSbLoading(false); return; }
+        const p = r.profile as { id: string; nickname: string; avatar_url?: string; role?: string; status?: string };
+        store.loginBackend({ id: p.id, nickname: p.nickname, avatarUrl: p.avatar_url ?? null, phone: sbEmail, role: (p.role as 'member' | 'admin') || 'member', status: (p.status as 'pending' | 'approved' | 'rejected') || 'approved' });
+      }
+    } catch (e) { setErr(e instanceof Error ? e.message : '认证失败'); }
+    setSbLoading(false);
+  };
 
   const testLogin = () => {
     if (!/^1\d{10}$/.test(phone)) { setErr('请输入11位测试手机号'); return; }
@@ -27,7 +62,31 @@ export default function LoginPage() {
           北京大学汇丰商学院 EMBA E23班<br />环中国边境线 27,171 公里接力
         </div>
       </div>
-      <div className="px-8 pb-10">
+      <div className="px-8 pb-6 space-y-3">
+        {isSupabaseEnabled() && (
+          <div className="bg-white/10 backdrop-blur rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 font-bold">云端登录</span>
+              <span className="text-xs text-white/50">Supabase 多人模式 · 数据永久保存</span>
+            </div>
+            <input value={sbEmail} onChange={(e) => setSbEmail(e.target.value)} placeholder="邮箱" type="email"
+              className="w-full mb-2 px-4 py-3 rounded-xl bg-white/90 text-slate-800 text-sm outline-none" />
+            <input value={sbPw} onChange={(e) => setSbPw(e.target.value)} placeholder="密码" type="password"
+              className="w-full mb-2 px-4 py-3 rounded-xl bg-white/90 text-slate-800 text-sm outline-none" />
+            {isRegister && (
+              <input value={sbNick} onChange={(e) => setSbNick(e.target.value.slice(0, 12))} placeholder="App昵称"
+                className="w-full mb-3 px-4 py-3 rounded-xl bg-white/90 text-slate-800 text-sm outline-none" />
+            )}
+            {err && <div className="text-xs text-amber-300 mb-2">{err}</div>}
+            <button onClick={handleCloudAuth} disabled={sbLoading}
+              className="w-full py-3.5 rounded-full bg-emerald-500 text-white font-bold active:bg-emerald-600 disabled:bg-slate-600">
+              {sbLoading ? '处理中...' : isRegister ? '注册并加入' : '登录'}
+            </button>
+            <button onClick={() => { setIsRegister(!isRegister); setErr(''); }} className="mt-2 text-xs text-white/50 underline">
+              {isRegister ? '已有账号？去登录' : '没有账号？去注册'}
+            </button>
+          </div>
+        )}
         {/* 测试登录入口（明确标注，非真实短信/微信授权） */}
         <div className="bg-white/10 backdrop-blur rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-3">

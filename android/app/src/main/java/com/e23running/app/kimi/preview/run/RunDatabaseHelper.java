@@ -18,15 +18,31 @@ import java.util.UUID;
  */
 public class RunDatabaseHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "e23_run.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
 
     private static final String TABLE_ACTIVITY = "run_activity";
     private static final String TABLE_POINTS = "track_points";
 
-    // 活动表
+    // 当前登录用户ID（由前端通过setCurrentUser设置）
+    private static volatile String currentUserId = "";
+    private static volatile int migrationVersion = 0;
+
+    public static void setCurrentUserId(String userId) {
+        currentUserId = userId != null ? userId : "";
+    }
+
+    public static String getCurrentUserId() {
+        return currentUserId;
+    }
+
+    public static int getMigrationVersion() { return migrationVersion; }
+    public static void setMigrationVersion(int v) { migrationVersion = v; }
+
+    // 活动表（v3增加user_id）
     private static final String CREATE_ACTIVITY =
         "CREATE TABLE " + TABLE_ACTIVITY + " (" +
         "client_activity_id TEXT PRIMARY KEY," +
+        "user_id TEXT NOT NULL DEFAULT ''," +
         "state INTEGER NOT NULL DEFAULT 0," +
         "start_time_ms INTEGER NOT NULL," +
         "end_time_ms INTEGER NOT NULL DEFAULT 0," +
@@ -94,6 +110,10 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
             db.execSQL("ALTER TABLE " + TABLE_POINTS + " ADD COLUMN distance_delta REAL NOT NULL DEFAULT 0");
             db.execSQL("ALTER TABLE " + TABLE_POINTS + " ADD COLUMN risk_flag TEXT");
         }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE " + TABLE_ACTIVITY + " ADD COLUMN user_id TEXT NOT NULL DEFAULT ''");
+            // 已有记录不绑定用户，留待首次登录时迁移
+        }
     }
 
     // ===== 活动管理 =====
@@ -105,6 +125,7 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
                     "_" + System.currentTimeMillis();
         ContentValues cv = new ContentValues();
         cv.put("client_activity_id", id);
+        cv.put("user_id", currentUserId);
         cv.put("state", RunState.STATE_RUNNING);
         cv.put("start_time_ms", startTimeMs);
         cv.put("created_at_ms", System.currentTimeMillis());
@@ -224,13 +245,14 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
 
     // ===== 查询 =====
 
-    /** 检测是否有未结束的活动 */
+    /** 检测当前用户是否有未结束的活动 */
     public String findActiveRun() {
         SQLiteDatabase db = getReadableDatabase();
+        String userId = currentUserId.isEmpty() ? "" : currentUserId;
         Cursor c = db.rawQuery(
             "SELECT client_activity_id FROM " + TABLE_ACTIVITY +
-            " WHERE state IN (?, ?) AND end_time_ms = 0 LIMIT 1",
-            new String[]{String.valueOf(RunState.STATE_RUNNING), String.valueOf(RunState.STATE_PAUSED)});
+            " WHERE (user_id = ? OR user_id = '') AND state IN (?, ?) AND end_time_ms = 0 LIMIT 1",
+            new String[]{userId, String.valueOf(RunState.STATE_RUNNING), String.valueOf(RunState.STATE_PAUSED)});
         try {
             if (c.moveToFirst()) return c.getString(0);
             return null;
@@ -362,18 +384,19 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
-    /** 获取历史活动列表 */
+    /** 获取当前用户的历史活动列表 */
     public List<RunState.RunSummary> listFinishedActivities(int limit, int offset) {
         List<RunState.RunSummary> list = new ArrayList<>();
         SQLiteDatabase db = getReadableDatabase();
+        String userId = currentUserId.isEmpty() ? "" : currentUserId;
         Cursor c = db.rawQuery(
             "SELECT a.*, " +
             "  (SELECT COUNT(*) FROM " + TABLE_POINTS + " p WHERE p.client_activity_id = a.client_activity_id) as total_pts," +
             "  (SELECT COUNT(*) FROM " + TABLE_POINTS + " p WHERE p.client_activity_id = a.client_activity_id AND p.accepted = 0) as rejected_pts," +
             "  (SELECT COUNT(*) FROM " + TABLE_POINTS + " p WHERE p.client_activity_id = a.client_activity_id AND p.mock_location = 1) as mock_pts," +
             "  (SELECT COUNT(*) FROM " + TABLE_POINTS + " p WHERE p.client_activity_id = a.client_activity_id AND p.speed > 10) as high_speed_pts" +
-            " FROM " + TABLE_ACTIVITY + " a WHERE a.state = ? ORDER BY a.start_time_ms DESC LIMIT ? OFFSET ?",
-            new String[]{String.valueOf(RunState.STATE_IDLE), String.valueOf(limit), String.valueOf(offset)});
+            " FROM " + TABLE_ACTIVITY + " a WHERE a.state = ? AND (a.user_id = ? OR a.user_id = '') ORDER BY a.start_time_ms DESC LIMIT ? OFFSET ?",
+            new String[]{String.valueOf(RunState.STATE_IDLE), userId, String.valueOf(limit), String.valueOf(offset)});
         try {
             while (c.moveToNext()) {
                 RunState.RunSummary s = new RunState.RunSummary();
@@ -439,6 +462,34 @@ public class RunDatabaseHelper extends SQLiteOpenHelper {
             new String[]{activityId});
         try {
             return c.moveToFirst() ? c.getInt(0) : 0;
+        } finally {
+            c.close();
+        }
+    }
+
+    /** 迁移旧数据：将user_id为空的记录绑定到当前用户（幂等，仅执行一次） */
+    public int migrateOrphanActivities() {
+        if (currentUserId.isEmpty()) return 0;
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues cv = new ContentValues();
+        cv.put("user_id", currentUserId);
+        int rows = db.update(TABLE_ACTIVITY, cv, "user_id IS NULL OR user_id = ''", null);
+        if (rows > 0) {
+            android.util.Log.i("E23GpsRun", "Migrated " + rows + " orphan activities to user " + currentUserId);
+        }
+        return rows;
+    }
+
+    /** 判断当前用户是否有旧数据需要迁移 */
+    public boolean hasOrphanActivities() {
+        if (currentUserId.isEmpty()) return false;
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = db.rawQuery(
+            "SELECT COUNT(*) FROM " + TABLE_ACTIVITY +
+            " WHERE (user_id IS NULL OR user_id = '') AND state = ? LIMIT 1",
+            new String[]{String.valueOf(RunState.STATE_IDLE)});
+        try {
+            return c.moveToFirst() && c.getInt(0) > 0;
         } finally {
             c.close();
         }
