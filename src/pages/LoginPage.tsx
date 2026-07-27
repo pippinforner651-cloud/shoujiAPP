@@ -43,12 +43,6 @@ export default function LoginPage() {
     setSbLoading(false);
   };
 
-  const testLogin = () => {
-    if (!/^1\d{10}$/.test(phone)) { setErr('请输入11位测试手机号'); return; }
-    if (code !== CONFIG.TEST_SMS_CODE) { setErr(`测试验证码为 ${CONFIG.TEST_SMS_CODE}`); return; }
-    store.login(nick.trim() || `E23同学${phone.slice(-4)}`, phone);
-  };
-
   return (
     <div className="h-full flex flex-col bg-gradient-to-b from-emerald-900 via-emerald-800 to-slate-900 text-white">
       <div className="flex-1 flex flex-col items-center justify-center px-8">
