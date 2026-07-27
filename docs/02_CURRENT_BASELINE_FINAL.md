@@ -5,8 +5,8 @@
 | 项目 | 值 |
 |---|---|
 | 当前分支 | `codex/e23-phase1-gps-map-fix` |
-| HEAD SHA | `d9b43a7e4dd82bc8b0c0c06987072d6d3c396b3c` |
-| 最新提交 | `feat: phase 2.1c supabase auth and cloud sync` |
+| HEAD SHA | `8054d9547c7eb665b5405218182c638a421e7fdb` |
+| 最新提交 | `chore: gitignore .env files, remove tracked .env` |
 
 ## 最近10个提交
 

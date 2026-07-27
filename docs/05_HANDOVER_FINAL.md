@@ -83,6 +83,16 @@ repo/
 4. **云端写入当前被阻挡**：RLS（class_members）+ Trigger（class_stats依赖class_id）
 5. **测试账号可用**：test_a@e23.com / test_b@e23.com
 
+## 路线版本冻结说明
+
+| 项目 | 值 |
+|---|---|
+| E23 V1 历史路线 | 21,423 km（Prisma seed 基线，历史参考） |
+| **E23 V2 正式目标** | **约 27,000 km（冻结，不可修改）** |
+| 个人贡献公里 | 按活动累计，独立展示 |
+| 路线推进公里 | 全班累计，独立展示 |
+| 团队事实源 | **Supabase PostgreSQL**（禁止 localStorage） |
+
 ## 已完成清单
 
 ### 项目基础

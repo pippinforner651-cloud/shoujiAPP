@@ -67,6 +67,6 @@
 | 项目 | 值 |
 |---|---|
 | E23 class_id | `94728c9e-9a66-485f-ae9e-12c4da074bb2` |
-| classes.total_route_km | 21423（V1基线，需更新为27000） |
+| classes.total_route_km | 21423（V1历史基线，E23 V2正式目标约27000km） |
 | 测试用户数量 | 2 (A + B) |
 | Cloud上有效活动 | 0（被RLS/Trigger阻挡） |
