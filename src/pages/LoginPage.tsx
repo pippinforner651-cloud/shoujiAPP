@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { store } from '../lib/store';
 import { CONFIG } from '../config';
-import { canUseCloudAuth, signIn, signUp, getCurrentProfile } from '../services/auth';
+import { signIn, signUp } from '../services/auth';
 import { isSupabaseEnabled } from '../lib/supabase';
 
 export default function LoginPage() {
@@ -9,7 +9,6 @@ export default function LoginPage() {
   const [code, setCode] = useState('');
   const [nick, setNick] = useState('');
   const [err, setErr] = useState('');
-  const [cloudMode, setCloudMode] = useState(false);
   const [sbEmail, setSbEmail] = useState('');
   const [sbPw, setSbPw] = useState('');
   const [sbNick, setSbNick] = useState('');
