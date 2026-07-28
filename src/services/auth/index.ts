@@ -24,26 +24,34 @@ export function canUseCloudAuth(): boolean {
   return isSupabaseEnabled();
 }
 
+/** 从手机号生成内部邮箱（手机号注册，邮箱仅用于 Supabase Auth 内部） */
+function phoneToEmail(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return `phone_${digits}@e23.preview`;
+}
+
 /** 注册新用户 */
-export async function signUp(email: string, password: string, nickname: string): Promise<AuthResult> {
+export async function signUp(phone: string, password: string, nickname: string): Promise<AuthResult> {
   const sb = getSupabase();
   if (!sb) return { ok: false, error: 'Supabase 未配置' };
+  const email = phoneToEmail(phone);
   const { data, error } = await sb.auth.signUp({ email, password });
   if (error) return { ok: false, error: error.message };
   if (!data.user) return { ok: false, error: '注册失败：未返回用户' };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: pe } = await (sb.from('profiles') as any).insert({ id: data.user.id, nickname, role: 'member', status: 'pending' });
+  const { error: pe } = await (sb.from('profiles') as any).insert({ id: data.user.id, nickname, phone, role: 'member', status: 'pending' });
   if (pe) return { ok: false, error: `profile 创建失败: ${pe.message}` };
 
   notify('SIGNED_IN', data.user.id);
-  return { ok: true, userId: data.user.id, profile: { id: data.user.id, nickname } };
+  return { ok: true, userId: data.user.id, profile: { id: data.user.id, nickname, phone } };
 }
 
 /** 登录 */
-export async function signIn(email: string, password: string): Promise<AuthResult> {
+export async function signIn(phone: string, password: string): Promise<AuthResult> {
   const sb = getSupabase();
   if (!sb) return { ok: false, error: 'Supabase 未配置' };
+  const email = phoneToEmail(phone);
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) return { ok: false, error: error.message };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

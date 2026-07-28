@@ -1,20 +1,60 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import ChinaMap from '../components/ChinaMap';
 import { store, fmtDuration, fmtPace } from '../lib/store';
+import { getSupabase, isSupabaseEnabled } from '../lib/supabase';
+import { CloudStatsRepo, CloudRunRepo } from '../repositories/CloudRepository';
 import { getActivePack } from '../lib/integrations';
 import { positionAt, nextNamedNode, type RouteNode } from '../data/route';
 import { CONFIG } from '../config';
 
 export default function MapPage() {
-  useSyncExternalStore((f) => store.subscribe(f), () => store.version);
   const [selected, setSelected] = useState<RouteNode | null>(null);
   const [posOpen, setPosOpen] = useState(false);
   const [view, setView] = useState<'team' | 'me'>('team');
   const pack = useMemo(() => getActivePack(store.customPack), [store.customPack]);
+  const [cloudTeamKm, setCloudTeamKm] = useState<number | null>(null);
+  const [cloudPersonKm, setCloudPersonKm] = useState<number | null>(null);
+  const classIdRef = useRef<string | null>(null);
 
-  // 两张地图：班级接力图（全班累计）+ 我的足迹图（个人累计）
-  // 多人后端未上线：两者都仅含本机真实贡献，班级图照常显示并如实标注
-  const total = view === 'team' ? store.classTotalKm : store.myTotalKm;
+  // 获取 classId
+  const getClassId = useCallback(async (): Promise<string | null> => {
+    if (classIdRef.current) return classIdRef.current;
+    if (store.user?.classId) { classIdRef.current = store.user.classId; return store.user.classId; }
+    if (!isSupabaseEnabled()) return null;
+    try {
+      const sb = getSupabase();
+      if (!sb) return null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (sb.from('classes') as any).select('id').eq('name', 'E23').single();
+      if (data?.id) { classIdRef.current = data.id; return data.id; }
+    } catch { /* ignore */ }
+    return null;
+  }, []);
+
+  // 从云端加载数据
+  const loadCloudData = useCallback(async () => {
+    if (!isSupabaseEnabled() || !store.user?.serverId) return;
+    try {
+      const cid = await getClassId();
+      if (!cid) return;
+      const [cls, acts] = await Promise.all([
+        CloudStatsRepo.getClassStats(cid),
+        CloudRunRepo.listByUser(store.user.serverId),
+      ]);
+      if (cls?.total_distance_m !== undefined) setCloudTeamKm(cls.total_distance_m / 1000);
+      if (acts.ok && acts.data) {
+        const totalCloud = (acts.data as Array<Record<string, unknown>>).reduce((s, r) => s + (Number(r.distance_m) || 0), 0);
+        setCloudPersonKm(totalCloud / 1000);
+      }
+    } catch { /* 静默失败，回退本地 */ }
+  }, [getClassId]);
+
+  useEffect(() => { loadCloudData(); }, [loadCloudData]);
+
+  // 团队距离：云端优先，回退 localStorage
+  const teamKm = cloudTeamKm ?? store.classTotalKm;
+  const personKm = cloudPersonKm ?? store.myTotalKm;
+  const total = view === 'team' ? teamKm : personKm;
   const pos = useMemo(() => positionAt(pack.totalKm > 0 ? total % pack.totalKm : 0), [total, pack.totalKm]);
   const heading = useMemo(() => nextNamedNode(total), [total]);
   const pct = pack.totalKm > 0 ? Math.min(100, (total / pack.totalKm) * 100) : 0;
@@ -27,7 +67,6 @@ export default function MapPage() {
     <div className="flex flex-col h-full" style={{ paddingBottom: 'var(--page-bottom-reserve)' }}>
       {/* 顶部统计区 */}
       <div className="px-4 pt-3 pb-2 bg-gradient-to-b from-emerald-50 to-transparent">
-        {/* 双地图切换：班级接力 / 我的足迹 */}
         <div className="grid grid-cols-2 p-1 rounded-full bg-slate-200/70 mb-2.5">
           <button onClick={() => setView('team')}
             className={`py-1.5 rounded-full text-sm font-bold transition ${view === 'team' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}>
@@ -51,15 +90,13 @@ export default function MapPage() {
             <div className="text-lg font-bold text-slate-700">{pack.totalKm.toLocaleString()} km</div>
           </div>
         </div>
-        {/* 已完成 / 当前位置 / 剩余路线 */}
         <div className="mt-2 h-2.5 rounded-full bg-blue-200 overflow-hidden">
           <div className="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all" style={{ width: `${Math.max(0.4, pct)}%` }} />
         </div>
         <div className="mt-1 flex justify-between text-xs text-slate-500">
-          <span>已完成 <b className="text-orange-600">{pct.toFixed(2)}%</b>（1:1 真实跑量）</span>
+          <span>已完成 <b className="text-orange-600">{pct.toFixed(2)}%</b>（{view === 'team' && cloudTeamKm !== null ? '云端 · 全班真实' : '1:1 真实跑量'}）</span>
           <span>剩余 <b className="text-blue-600">{Math.max(0, pack.totalKm - total).toLocaleString('zh-CN', { maximumFractionDigits: 0 })} km</b></span>
         </div>
-        {/* 今日数据 + 年度目标 */}
         <div className="mt-2 grid grid-cols-3 gap-2 text-center">
           <div className="bg-white rounded-xl py-1.5 shadow-sm">
             <div className="text-sm font-black text-slate-800 tabular-nums">{store.myTodayKm.toFixed(1)}</div>
@@ -74,20 +111,15 @@ export default function MapPage() {
             <div className="text-[10px] text-slate-500">年度目标 {CONFIG.ANNUAL_GOAL_KM}km</div>
           </div>
         </div>
-        {/* 多人状态：不伪造人数/里程 */}
-        {!CONFIG.MULTIPLAYER_ENABLED && (
-          <div className="mt-2 text-[11px] px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 text-center">
-            {view === 'team'
-              ? '多人功能尚未上线 · 今日参与人数和全班总里程需后端接入 · 当前班级图仅显示本机贡献'
-              : '多人功能尚未上线 · 当前足迹图为本机真实数据'}
+        {view === 'team' && cloudTeamKm !== null && (
+          <div className="mt-2 text-[11px] px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 text-center">
+            ✅ 云端多人模式 · 班级总里程来自 Supabase 真实合计
           </div>
         )}
       </div>
 
-      {/* 地图 */}
       <div className="flex-1 relative bg-[#F4F8F6] min-h-0">
         <ChinaMap pack={pack} progressKm={total} onSelectNode={(n) => { setPosOpen(false); setSelected(n); }} onRunnerClick={showCurrent} selectedNode={selected} />
-        {/* 当前位置卡 */}
         <button
           onClick={showCurrent}
           className="absolute left-3 bottom-3 right-3 sm:right-auto sm:w-80 bg-white/95 backdrop-blur rounded-2xl shadow-lg px-4 py-3 text-left active:scale-[0.99] transition"
@@ -104,9 +136,8 @@ export default function MapPage() {
         </button>
       </div>
 
-      {/* 最近真实运动动态（仅本机真实记录） */}
       <div className="shrink-0 bg-white border-t border-slate-100">
-        <div className="px-4 pt-2 pb-1 text-xs font-bold text-slate-600">最近运动动态 <span className="font-normal text-slate-400">（本机真实记录）</span></div>
+        <div className="px-4 pt-2 pb-1 text-xs font-bold text-slate-600">最近运动动态</div>
         {recent.length === 0 ? (
           <div className="px-4 pb-3 text-xs text-slate-400">还没有运动记录，去「跑步」页完成第一跑</div>
         ) : (
@@ -122,7 +153,6 @@ export default function MapPage() {
         )}
       </div>
 
-      {/* 当前位置抽屉 */}
       {posOpen && (
         <div className="absolute inset-x-0 bottom-0 z-20 bg-white rounded-t-3xl shadow-2xl max-h-[62%] overflow-y-auto">
           <div className="sticky top-0 bg-white rounded-t-3xl px-5 pt-3 pb-2 border-b border-slate-100">
@@ -174,7 +204,6 @@ export default function MapPage() {
         </div>
       )}
 
-      {/* 站点详情抽屉 */}
       {selected && (
         <div className="absolute inset-x-0 bottom-0 z-20 bg-white rounded-t-3xl shadow-2xl max-h-[62%] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <div className="sticky top-0 bg-white rounded-t-3xl px-5 pt-3 pb-2 border-b border-slate-100">

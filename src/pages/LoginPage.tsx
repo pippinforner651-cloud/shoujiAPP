@@ -9,7 +9,7 @@ export default function LoginPage() {
   const [code, setCode] = useState('');
   const [nick, setNick] = useState('');
   const [err, setErr] = useState('');
-  const [sbEmail, setSbEmail] = useState('');
+  const [sbPhone, setSbPhone] = useState('');
   const [sbPw, setSbPw] = useState('');
   const [sbNick, setSbNick] = useState('');
   const [isRegister, setIsRegister] = useState(false);
@@ -23,20 +23,20 @@ export default function LoginPage() {
 
   const handleCloudAuth = async () => {
     setErr('');
-    if (!sbEmail || !sbPw) { setErr('请输入邮箱和密码'); return; }
+    if (!sbPhone || !sbPw) { setErr('请输入手机号和密码'); return; }
+    if (isRegister && !/^1\d{10}$/.test(sbPhone)) { setErr('请输入11位手机号'); setSbLoading(false); return; }
     setSbLoading(true);
     try {
       if (isRegister) {
         if (!sbNick.trim()) { setErr('请输入昵称'); setSbLoading(false); return; }
-        const r = await signUp(sbEmail, sbPw, sbNick.trim());
+        const r = await signUp(sbPhone, sbPw, sbNick.trim());
         if (!r.ok) { setErr(r.error); setSbLoading(false); return; }
-        // SignUp may auto-confirm or require email confirmation
-        store.loginBackend({ id: r.userId, nickname: sbNick.trim(), avatarUrl: null, phone: sbEmail, role: 'member', status: 'pending' });
+        store.loginBackend({ id: r.userId, nickname: sbNick.trim(), avatarUrl: null, phone: sbPhone, role: 'member', status: 'pending' });
       } else {
-        const r = await signIn(sbEmail, sbPw);
+        const r = await signIn(sbPhone, sbPw);
         if (!r.ok) { setErr(r.error); setSbLoading(false); return; }
-        const p = r.profile as { id: string; nickname: string; avatar_url?: string; role?: string; status?: string };
-        store.loginBackend({ id: p.id, nickname: p.nickname, avatarUrl: p.avatar_url ?? null, phone: sbEmail, role: (p.role as 'member' | 'admin') || 'member', status: (p.status as 'pending' | 'approved' | 'rejected') || 'approved' });
+        const p = r.profile as { id: string; nickname: string; avatar_url?: string; role?: string; status?: string; class_id?: string };
+        store.loginBackend({ id: p.id, nickname: p.nickname, avatarUrl: p.avatar_url ?? null, phone: sbPhone, role: (p.role as 'member' | 'admin') || 'member', status: (p.status as 'pending' | 'approved' | 'rejected') || 'approved', classId: p.class_id });
       }
     } catch (e) { setErr(e instanceof Error ? e.message : '认证失败'); }
     setSbLoading(false);
@@ -49,10 +49,11 @@ export default function LoginPage() {
           <span className="text-3xl font-black tracking-tight leading-none">E23</span>
           <span className="text-[11px] font-bold mt-1 tracking-[0.2em]">跑起来</span>
         </div>
-        <div className="text-2xl font-black mb-2">E23跑起来</div>
+        <div className="text-2xl font-black mb-1">E23跑起来</div>
+        <div className="text-sm text-white/80 mb-2 font-medium">从戈壁出发，奔向世界</div>
         <div className="mb-3 text-[11px] px-3 py-1 rounded-full bg-white/15 text-white/80 font-bold tracking-wider">{CONFIG.APP_EDITION}</div>
         <div className="text-sm text-white/70 text-center leading-relaxed">
-          北京大学汇丰商学院 EMBA E23班<br />环中国边境线 27,171 公里接力
+          E23同学共同完成约27000公里中国路线挑战
         </div>
       </div>
       <div className="px-8 pb-6 space-y-3">
@@ -62,8 +63,9 @@ export default function LoginPage() {
               <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 font-bold">云端登录</span>
               <span className="text-xs text-white/50">Supabase 多人模式 · 数据永久保存</span>
             </div>
-            <input value={sbEmail} onChange={(e) => setSbEmail(e.target.value)} placeholder="邮箱" type="email"
-              className="w-full mb-2 px-4 py-3 rounded-xl bg-white/90 text-slate-800 text-sm outline-none" />
+            <input value={sbPhone} onChange={(e) => setSbPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+              placeholder="手机号" inputMode="numeric"
+              className="w-full mb-2 px-4 py-3 rounded-xl bg-white/90 text-slate-800 text-sm outline-none placeholder:text-slate-400" />
             <input value={sbPw} onChange={(e) => setSbPw(e.target.value)} placeholder="密码" type="password"
               className="w-full mb-2 px-4 py-3 rounded-xl bg-white/90 text-slate-800 text-sm outline-none" />
             {isRegister && (

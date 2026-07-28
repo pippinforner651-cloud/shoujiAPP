@@ -11,6 +11,7 @@ export interface UserProfile {
   joinedAt: number;
   authMode: 'test' | 'server';   // test=本机测试登录；server=后端账号
   serverId?: string;             // 后端用户ID
+  classId?: string;              // 班级ID（从Supabase profiles读取）
   serverStatus?: 'pending' | 'approved' | 'rejected'; // 后端审批状态
   serverRole?: 'member' | 'admin';
 }
@@ -77,8 +78,8 @@ class Store {
     this.emit();
   }
 
-  /** 后端账号登录（AuthAPI 成功后调用，token 由 api/client 保管） */
-  loginBackend(u: { id: string; nickname: string; avatarUrl: string | null; phone: string; role: 'member' | 'admin'; status: 'pending' | 'approved' | 'rejected' }) {
+  /** 后端账号登录（AuthAPI 成功后调用） */
+  loginBackend(u: { id: string; nickname: string; avatarUrl: string | null; phone: string; role: 'member' | 'admin'; status: 'pending' | 'approved' | 'rejected'; classId?: string }) {
     const rnd = Math.floor(Math.random() * AVATAR_COLORS.length);
     this.user = {
       nickname: u.nickname,
@@ -89,6 +90,7 @@ class Store {
       joinedAt: Date.now(),
       authMode: 'server',
       serverId: u.id,
+      classId: u.classId,
       serverStatus: u.status,
       serverRole: u.role,
     };
@@ -153,6 +155,7 @@ class Store {
       const result = await CloudRunRepo.upsertActivity({
         client_id: rec.id,
         user_id: this.user.serverId,
+        class_id: this.user.classId || undefined,
         distance_m: Math.round(rec.km * 1000),
         duration_sec: rec.durationSec,
         avg_pace_sec: rec.avgPaceSec,

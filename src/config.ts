@@ -15,8 +15,8 @@ export const CONFIG = {
   // 未来地图服务（高德等）接入预留
   MAP_PROVIDER: import.meta.env.VITE_MAP_PROVIDER ?? 'static-pack',
   // 版本标识
-  APP_EDITION: 'Kimi预览版',
-  APP_PHASE: 'Phase 1.5 GPS Live Fix',
+  APP_EDITION: 'E23 V2 内测版',
+  APP_PHASE: 'Phase 2.1D Cloud Data Integration',
   // 构建时由 GitHub Actions 注入（本地开发为 local）
   COMMIT_SHA: (import.meta.env.VITE_COMMIT_SHA ?? 'local').slice(0, 7),
 };
