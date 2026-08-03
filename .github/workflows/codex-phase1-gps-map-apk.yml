@@ -106,6 +106,7 @@ jobs:
           echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
           echo "sha_name=$SHA_NAME" >> "$GITHUB_OUTPUT"
           echo "apk_sha256=$(cut -d' ' -f1 "$SHA_NAME")" >> "$GITHUB_OUTPUT"
+          echo "safe_label=$SAFE_LABEL" >> "$GITHUB_OUTPUT"
           echo "APK name: $APK_NAME"
           echo "APK size: $(wc -c < "$APK_NAME")"
           echo "APK SHA256: $(cut -d' ' -f1 "$SHA_NAME")"
@@ -113,7 +114,8 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: E23跑起来_${{ inputs.ref || github.ref_name }}
+          # 使用清洗后的标签作为 artifact 名（分支名含 / 会非法）
+          name: E23跑起来_${{ steps.package.outputs.safe_label }}
           path: |
             ${{ steps.package.outputs.apk_name }}
             ${{ steps.package.outputs.sha_name }}
