@@ -5,13 +5,11 @@
 
 ## 1. 打开地址
 
-用 **Safari 浏览器**打开（暂以开发预览地址为例，正式地址以班级发布为准）：
+用 **Safari 浏览器**打开（最新版 PWA，已部署）：
 
 ```
-https://cbe907372fa7484c83f2febc9d97b44b.app.codebuddy.work
+https://1e2a046fcb904f7dabc096741e391932.app.codebuddy.work
 ```
-
-> ⚠️ 该地址当前为开发预览。正式内部体验地址待部署最新版后统一公布。
 
 ## 2. 添加到主屏幕
 
