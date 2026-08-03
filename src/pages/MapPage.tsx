@@ -49,7 +49,11 @@ export default function MapPage() {
     } catch { /* 静默失败，回退本地 */ }
   }, [getClassId]);
 
-  useEffect(() => { loadCloudData(); }, [loadCloudData]);
+  useEffect(() => {
+    // 延迟到 effect 之后调用，避免在 effect 体内直接 setState（react-hooks/set-state-in-effect）
+    const timer = window.setTimeout(() => { void loadCloudData(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadCloudData]);
 
   // 团队距离：云端优先，回退 localStorage
   const teamKm = cloudTeamKm ?? store.classTotalKm;
@@ -87,7 +91,7 @@ export default function MapPage() {
           </div>
           <div className="text-right">
             <div className="text-xs text-slate-500">环线总长 <span className="text-[9px] px-1 py-0.5 rounded bg-slate-200 text-slate-500 font-bold">{CONFIG.APP_EDITION}</span></div>
-            <div className="text-lg font-bold text-slate-700">{pack.totalKm.toLocaleString()} km</div>
+            <div className="text-lg font-bold text-slate-700">约{Math.round(pack.totalKm / 1000).toLocaleString('zh-CN')} km</div>
           </div>
         </div>
         <div className="mt-2 h-2.5 rounded-full bg-blue-200 overflow-hidden">

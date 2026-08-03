@@ -1,6 +1,6 @@
-// E23跑起来 Kimi预览版 · Service Worker
+// E23跑起来 V2 内测版 · Service Worker
 // 策略：页面导航 network-first（保证更新），静态资源 cache-first（离线可用）
-const CACHE = 'e23-kimi-preview-v1';
+const CACHE = 'e23-v2-internal-v2';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon.png', './favicon.png'];
 
 self.addEventListener('install', (e) => {
