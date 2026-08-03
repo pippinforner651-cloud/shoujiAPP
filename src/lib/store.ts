@@ -146,30 +146,43 @@ class Store {
     this.syncRecordToCloud(rec);
   }
 
-  /** 将新记录异步写入Supabase */
+  /** 将新记录异步写入Supabase（字段名与 run_activities 表一一对应） */
   private async syncRecordToCloud(rec: RunRecord) {
     try {
       const { isSupabaseEnabled } = await import('../lib/supabase');
       if (!isSupabaseEnabled() || !this.user?.serverId) return;
       const { CloudRunRepo } = await import('../repositories/CloudRepository');
       const result = await CloudRunRepo.upsertActivity({
-        client_id: rec.id,
+        client_id: rec.id,                       // 幂等键：同一活动重复重试不会产生重复行
         user_id: this.user.serverId,
         class_id: this.user.classId || undefined,
         distance_m: Math.round(rec.km * 1000),
-        duration_sec: rec.durationSec,
-        avg_pace_sec: rec.avgPaceSec,
+        duration_s: rec.durationSec,
+        pace_seconds_per_km: rec.avgPaceSec,
         source: rec.source === 'joyrun' ? 'joyrun' : rec.source === 'gps' ? 'gps' : 'manual',
         status: 'valid',
-        started_at: rec.startedAt ? new Date(rec.startedAt).toISOString() : new Date(rec.ts - rec.durationSec * 1000).toISOString(),
-        ended_at: new Date(rec.ts).toISOString(),
+        start_time: rec.startedAt ? new Date(rec.startedAt).toISOString() : new Date(rec.ts - rec.durationSec * 1000).toISOString(),
+        end_time: new Date(rec.ts).toISOString(),
       });
       if (result.ok) {
+        // 云端成功后才标记同步成功
         rec.syncState = 'ok';
         localStorage.setItem(RECORDS_KEY, JSON.stringify(this.records.slice(0, 500)));
         this.emit();
+      } else {
+        // 云端失败：保留本地记录并标记待同步，错误信息不静默
+        rec.syncState = 'queued';
+        localStorage.setItem(RECORDS_KEY, JSON.stringify(this.records.slice(0, 500)));
+        this.emit();
+        console.error('[E23] syncRecordToCloud failed:', result.error);
       }
-    } catch { /* 离线时静默失败，下次启动或手动刷新时重试 */ }
+    } catch (e) {
+      // 离线/异常：保留本地待同步记录，下次重试；错误信息不静默
+      rec.syncState = 'queued';
+      localStorage.setItem(RECORDS_KEY, JSON.stringify(this.records.slice(0, 500)));
+      this.emit();
+      console.error('[E23] syncRecordToCloud error:', e);
+    }
   }
 
   /** 从Supabase加载当前用户的活动列表 */
@@ -182,12 +195,12 @@ class Store {
       if (!result.ok || !result.data) return false;
       const records: RunRecord[] = (result.data as Array<Record<string, unknown>>).map((a) => ({
         id: a.client_id as string,
-        ts: new Date((a.ended_at || a.created_at) as string).getTime(),
+        ts: new Date((a.end_time || a.created_at) as string).getTime(),
         km: ((a.distance_m as number) || 0) / 1000,
-        durationSec: (a.duration_sec as number) || 0,
-        avgPaceSec: (a.avg_pace_sec as number) || 0,
+        durationSec: (a.duration_s as number) || 0,
+        avgPaceSec: (a.pace_seconds_per_km as number) || 0,
         source: (a.source as RunRecord['source']) || 'manual',
-        startedAt: a.started_at ? new Date(a.started_at as string).getTime() : undefined,
+        startedAt: a.start_time ? new Date(a.start_time as string).getTime() : undefined,
         syncState: 'ok',
       }));
       // 合并：云端记录为主，本地未同步记录补充
