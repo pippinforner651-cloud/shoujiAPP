@@ -58,9 +58,10 @@
 
 | 测试 | 结果 | 原因 |
 |---|---|---|
-| A加入class_members | ❌ | RLS阻挡（需service_role） |
-| A更新profile.class_id | ❌ | 策略禁止（普通用户） |
-| A写入run_activities (1km) | ❌ | class_stats trigger缺class_id |
+| A加入class_members | ⚠️ | 由管理员/服务端 admin_add_class_member 完成 |
+| A更新profile.class_id | ❌ | 策略禁止（普通用户，设计如此） |
+| A写入run_activities (1km) | ✅（2026-08-03 字段修复后） | 字段映射修正（duration_s/pace_seconds_per_km/start_time/end_time）后写入成功 |
+| 换算规则 | ✅ 冻结为 1:1 | Migration 007 纠偏：completed_km = SUM(distance_m)/1000.0；旧 1:10 废弃 |
 
 ## 当前线上测试数据
 

@@ -81,6 +81,7 @@ export default function MapPage() {
             我的足迹图
           </button>
         </div>
+        <div className="text-[10px] text-slate-400 mb-2">你跑的每 1 公里，都会让 E23 班级路线前进 1 公里</div>
         <div className="flex items-end justify-between">
           <div>
             <div className="text-xs text-slate-500">{view === 'team' ? 'E23班环中国接力 · 全班累计' : '我的足迹 · 个人累计'}</div>

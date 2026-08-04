@@ -11,14 +11,17 @@
 -- 幂等性：CREATE OR REPLACE FUNCTION / DROP TRIGGER IF EXISTS + CREATE TRIGGER
 --         / INSERT ... ON CONFLICT DO UPDATE，可重复执行。
 --
--- 口径（与原始 migration 003/006 完全一致）：
+-- 口径（与原始 migration 003/006 一致，route_progress 换算按 E23 V2 正式 1:1 规则修正）：
 --   1. 只统计 status = 'valid' 的活动
 --   2. class_stats  = 按 class_id 全量 SUM(distance_m)、SUM(duration_s)、
 --                     COUNT(*)、COUNT(DISTINCT user_id)
---   3. route_progress = completed_km = total_m / 10000.0（1:10 比例）
+--   3. route_progress = completed_km = total_m / 1000.0（1:1 比例：跑量1km=路线推进1km）
 --                       progress_pct = completed_km / 27000 * 100（约27,000km目标）
 --   4. user_stats（新增触发器，口径同 class_stats 按 user 维度）：
 --      全量 SUM / COUNT + last_activity_date = MAX(end_time)::date
+--
+-- 换算规则说明：E23 V2 正式规则为 1:1（真实跑量 = 班级路线推进）。
+-- 旧 1:10（total_m / 10000）属于历史错误口径，本脚本已废弃该换算。
 --
 -- SECURITY DEFINER：需要。class_stats / route_progress 的 RLS 策略
 --   "only triggers can write class stats / route progress" 为 FOR ALL USING(false)，
@@ -95,7 +98,9 @@ BEGIN
   -- 计算 route_progress
   SELECT total_route_km INTO e23_total_km FROM public.classes WHERE id = target_id;
   e23_total_km := COALESCE(e23_total_km, 27000);  -- 约 27,000 km（E23 V2 目标）
-  progress_km := ROUND(total_m::NUMERIC / 10000.0, 4); -- 1:10 比例
+  -- E23 V2 正式规则：真实跑量与路线推进 1:1（1km 跑量 = 1km 路线推进）
+  -- 旧 1:10（total_m / 10000）为历史错误口径，已废弃
+  progress_km := ROUND(total_m::NUMERIC / 1000.0, 4);
 
   INSERT INTO public.route_progress (class_id, current_city_index, completed_km, progress_pct, updated_at)
   VALUES (target_id, 0, progress_km, ROUND((progress_km / e23_total_km * 100)::NUMERIC, 2), NOW())
@@ -234,11 +239,11 @@ ON CONFLICT (class_id) DO UPDATE SET
   active_members = EXCLUDED.active_members,
   updated_at = NOW();
 
--- 4.3 route_progress 全量重算（约27,000km 目标，1:10 比例）
+-- 4.3 route_progress 全量重算（约27,000km 目标，1:1 比例：跑量1km=路线推进1km）
 INSERT INTO public.route_progress (class_id, current_city_index, completed_km, progress_pct, updated_at)
 SELECT ra.class_id, 0,
-       ROUND(COALESCE(SUM(ra.distance_m),0)::NUMERIC / 10000.0, 4),
-       ROUND(ROUND(COALESCE(SUM(ra.distance_m),0)::NUMERIC / 10000.0, 4) / 27000.0 * 100, 2),
+       ROUND(COALESCE(SUM(ra.distance_m),0)::NUMERIC / 1000.0, 4),
+       ROUND(ROUND(COALESCE(SUM(ra.distance_m),0)::NUMERIC / 1000.0, 4) / 27000.0 * 100, 2),
        NOW()
 FROM public.run_activities ra
 WHERE ra.status = 'valid' AND ra.class_id IS NOT NULL

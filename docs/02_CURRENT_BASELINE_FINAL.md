@@ -73,6 +73,8 @@ c3ff818 fix: implement real continuous GPS diagnostic session
 | iPhone Safari测试 | ❌ 未开始 | 需测试设备 |
 
 > **总体状态：真实多人系统底座完成，业务闭环待Phase 2.1D验收**
+>
+> **冻结规则：路线换算 1:1**（真实跑量 = 班级路线推进；completed_km = SUM(distance_m)/1000.0，由 Migration 007 纠偏，禁止 1:10）。
 
 ## 测试状态
 

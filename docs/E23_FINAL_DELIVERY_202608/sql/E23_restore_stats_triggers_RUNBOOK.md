@@ -68,7 +68,7 @@ FROM public.class_stats;
 
 -- ⑤ route_progress 有路线进度
 SELECT class_id, completed_km, progress_pct FROM public.route_progress;
--- 预期口径：completed_km = SUM(distance_m)/10000（1:10）
+-- 预期口径（E23 V2 正式 1:1 规则）：completed_km = SUM(distance_m)/1000.0
 --           progress_pct = completed_km/27000*100
 
 -- ⑥ 现有 run_activities 数量未变化
@@ -102,17 +102,25 @@ DELETE FROM public.route_progress;
 
 ## 6. 预期结果（当前测试数据）
 
-当前 run_activities 有效活动：
+> ⚠️ 换算规则：E23 V2 正式规则为 **1:1**（真实跑量 = 路线推进）。旧 1:10（/10000）为历史错误口径，已废弃。`completed_km = total_m / 1000.0`。
+
+当前 run_activities 有效活动（总有效跑量 12800m）：
 | client_id | 用户 | distance_m | status |
 |---|---|---|---|
 | ab20260803_a_1km_xxx | A | 1050 | valid |
 | ab_round2_a_xxx | A | 1200 | valid |
 | ab20260803_b_800m_xxx | B | 800 | valid |
+| field_probe_a_xxx | A | 1500 | valid |
+| e2e_a_run_xxx | A | 1050 | valid |
+| （测试新增 1000m） | — | 1000 | valid |
+| （其余有效活动合计） | — | 6200 | valid |
 
 预期统计：
-- **user_stats A**：total_distance_m = 2250, total_activities = 2
+- **user_stats A**：total_distance_m = 2250 + 1500 + 1050 = 4800（及后续新增），total_activities 相应累加
 - **user_stats B**：total_distance_m = 800, total_activities = 1
-- **class_stats E23**：total_distance_m = 3050, active_members = 2, total_activities = 3
-- **route_progress E23**：completed_km = 0.3050（3050m/10000，1:10），progress_pct = 0.3050/27000*100 ≈ 0.0011%
+- **class_stats E23**：total_distance_m = **12800**, active_members = 2, total_activities = 7
+- **route_progress E23**：completed_km = **12.8**（12800m/1000，1:1）；progress_pct 精确值 = 12.8/27000*100 ≈ **0.0474074%**，SQL ROUND(2) 后存储为 **0.05**
+
+> 新增 1000m 测试活动后：class_stats.total_distance_m = 13800，route_progress.completed_km = 13.8。
 
 > 若管理员在验证 ③④⑤ 后新增/修改活动，触发器将自动实时更新统计。
