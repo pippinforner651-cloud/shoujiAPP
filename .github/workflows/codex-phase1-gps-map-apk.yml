@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - codex/e23-phase1-gps-map-fix
+    tags:
+      - 'e23-v2-*'
   workflow_dispatch:
     inputs:
       ref:
@@ -13,7 +15,7 @@ on:
         default: e23-v2-internal-v1
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: e23-phase1-gps-map-${{ github.ref }}
@@ -121,3 +123,88 @@ jobs:
             ${{ steps.package.outputs.sha_name }}
           if-no-files-found: error
           retention-days: 14
+
+      # ============================================================
+      # 发布 GitHub Release（仅 tag 推送 / 手动指定 tag 时执行）
+      # 上传：APK + sha256 + 网页版zip + 完整交付总包
+      # 免登录下载：https://github.com/<repo>/releases/tag/<tag>
+      # ============================================================
+      - name: Build release assets and publish Release
+        if: startsWith(github.ref, 'refs/tags/e23-v2-') || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_TAG='${{ inputs.ref || github.ref_name }}'
+          STAGE=$(mktemp -d)
+
+          # 01_Android
+          mkdir -p "$STAGE/01_Android"
+          cp "${{ steps.package.outputs.apk_name }}" "$STAGE/01_Android/E23跑起来_V2_内部体验版_Android.apk"
+          cp "${{ steps.package.outputs.sha_name }}" "$STAGE/01_Android/apk-sha256.txt"
+          cp docs/E23_FINAL_DELIVERY_202608/01_安卓下载与安装说明.md "$STAGE/01_Android/Android安装说明.md"
+
+          # 02_iPhone
+          mkdir -p "$STAGE/02_iPhone"
+          cp docs/E23_FINAL_DELIVERY_202608/02_苹果iPhone使用说明.md "$STAGE/02_iPhone/PWA使用说明.md"
+
+          # 03_Web（CI 产物 dist）
+          mkdir -p "$STAGE/03_Web"
+          zip -rq "$STAGE/03_Web/E23跑起来_V2_网页版部署.zip" dist -x "dist/.*"
+          printf 'https://1e2a046fcb904f7dabc096741e391932.app.codebuddy.work\n' > "$STAGE/03_Web/PWA正式地址.txt"
+
+          # 04_二维码（CI 生成）
+          mkdir -p "$STAGE/04_二维码"
+          python -m pip install -q qrcode[pil] 2>/dev/null || pip install -q qrcode[pil]
+          python - "$STAGE/04_二维码" "$RELEASE_TAG" <<'PY'
+          import qrcode, sys, os
+          out, tag = sys.argv[1], sys.argv[2]
+          release_url = f"https://github.com/pippinforner651-cloud/shoujiAPP/releases/tag/{tag}"
+          pwa_url = "https://1e2a046fcb904f7dabc096741e391932.app.codebuddy.work"
+          def mk(data, name):
+              q = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=3)
+              q.add_data(data); q.make(fit=True)
+              q.make_image(fill_color="black", back_color="white").save(os.path.join(out, name))
+          mk(release_url, "QR_Android_APK_正式下载.png")
+          mk(pwa_url, "QR_iPhone_PWA.png")
+          mk(release_url, "QR_网页版.png")
+          mk(pwa_url, "QR_统一入口.png")
+          PY
+
+          # 05_交付文档
+          mkdir -p "$STAGE/05_交付文档"
+          cp docs/E23_FINAL_DELIVERY_202608/00_交付总览.md docs/E23_FINAL_DELIVERY_202608/03_安卓苹果功能差异说明.md \
+             docs/E23_FINAL_DELIVERY_202608/04_账号注册与登录说明.md docs/E23_FINAL_DELIVERY_202608/05_开始跑步与结束保存说明.md \
+             docs/E23_FINAL_DELIVERY_202608/06_班级总里程与路线说明.md docs/E23_FINAL_DELIVERY_202608/07_已知问题与使用边界.md \
+             docs/E23_FINAL_DELIVERY_202608/08_问题反馈模板.md docs/E23_FINAL_DELIVERY_202608/09_版本与校验信息.md \
+             docs/E23_FINAL_DELIVERY_202608/11_交付验收清单.md docs/E23_FINAL_DELIVERY_202608/E23跑起来_同学使用入口.md \
+             "$STAGE/05_交付文档/"
+
+          # 06_技术交接
+          mkdir -p "$STAGE/06_技术交接"
+          cp docs/PRODUCT_RULES_FROZEN.md docs/E23_FINAL_DELIVERY_202608/10_开发交接摘要.md \
+             docs/E23_FINAL_DELIVERY_202608/sql/E23_restore_stats_triggers.sql \
+             docs/E23_FINAL_DELIVERY_202608/sql/E23_restore_stats_triggers_RUNBOOK.md \
+             docs/E23_FINAL_DELIVERY_202608/sql/E23_2.1D-2_执行前确认包.md \
+             supabase/migrations/007_route_progress_ratio_1_to_1.sql \
+             "$STAGE/06_技术交接/"
+
+          # 总包
+          (cd "$STAGE" && zip -rq "E23跑起来_V2_最终交付总包_完整版.zip" 01_Android 02_iPhone 03_Web 04_二维码 05_交付文档 06_技术交接)
+          cp "$STAGE/E23跑起来_V2_最终交付总包_完整版.zip" .
+
+          # Release（已存在则上传资产，否则创建）
+          if gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${{ steps.package.outputs.apk_name }}" "${{ steps.package.outputs.sha_name }}" "$STAGE/03_Web/E23跑起来_V2_网页版部署.zip" "E23跑起来_V2_最终交付总包_完整版.zip" --repo "${{ github.repository }}" --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              "${{ steps.package.outputs.apk_name }}" "${{ steps.package.outputs.sha_name }}" \
+              "$STAGE/03_Web/E23跑起来_V2_网页版部署.zip" "E23跑起来_V2_最终交付总包_完整版.zip" \
+              --repo "${{ github.repository }}" \
+              --title "E23跑起来 V2 内部体验版" \
+              --notes "E23跑起来 V2 内部体验版（2026-08）· 路线约27,000km · 真实跑量与路线推进 1:1" \
+              --latest
+          fi
+          echo "RELEASE_URL=https://github.com/${{ github.repository }}/releases/tag/$RELEASE_TAG"
+          echo "APK_SIZE=$(wc -c < "${{ steps.package.outputs.apk_name }}")"
